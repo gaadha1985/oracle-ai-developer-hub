@@ -28,7 +28,7 @@ type Options struct {
 	Force         bool
 	Refresh       bool
 	OpenClawHome  string
-	PicoClawHome  string
+	PicoOraClawHome  string
 }
 
 type Action struct {
@@ -62,12 +62,12 @@ func Run(opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	picoClawHome, err := resolvePicoClawHome(opts.PicoClawHome)
+	picoClawHome, err := resolvePicoOraClawHome(opts.PicoOraClawHome)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := os.Stat(openclawHome); os.IsNotExist(err) {
+	if _, err = os.Stat(openclawHome); os.IsNotExist(err) {
 		return nil, fmt.Errorf("OpenClaw installation not found at %s", openclawHome)
 	}
 
@@ -76,7 +76,7 @@ func Run(opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	fmt.Println("Migrating from OpenClaw to PicoClaw")
+	fmt.Println("Migrating from OpenClaw to PicoOraClaw")
 	fmt.Printf("  Source:      %s\n", openclawHome)
 	fmt.Printf("  Destination: %s\n", picoClawHome)
 	fmt.Println()
@@ -118,7 +118,7 @@ func Plan(opts Options, openclawHome, picoClawHome string) ([]Action, []string, 
 				Type:        ActionConvertConfig,
 				Source:      configPath,
 				Destination: filepath.Join(picoClawHome, "config.json"),
-				Description: "convert OpenClaw config to PicoClaw format",
+				Description: "convert OpenClaw config to PicoOraClaw format",
 			})
 
 			data, err := LoadOpenClawConfig(configPath)
@@ -161,7 +161,7 @@ func Execute(actions []Action, openclawHome, picoClawHome string) *Result {
 				fmt.Printf("  ✓ Converted config: %s\n", action.Destination)
 			}
 		case ActionCreateDir:
-			if err := os.MkdirAll(action.Destination, 0755); err != nil {
+			if err := os.MkdirAll(action.Destination, 0o755); err != nil {
 				result.Errors = append(result.Errors, err)
 			} else {
 				result.DirsCreated++
@@ -174,9 +174,13 @@ func Execute(actions []Action, openclawHome, picoClawHome string) *Result {
 				continue
 			}
 			result.BackupsCreated++
-			fmt.Printf("  ✓ Backed up %s -> %s.bak\n", filepath.Base(action.Destination), filepath.Base(action.Destination))
+			fmt.Printf(
+				"  ✓ Backed up %s -> %s.bak\n",
+				filepath.Base(action.Destination),
+				filepath.Base(action.Destination),
+			)
 
-			if err := os.MkdirAll(filepath.Dir(action.Destination), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(action.Destination), 0o755); err != nil {
 				result.Errors = append(result.Errors, err)
 				continue
 			}
@@ -188,7 +192,7 @@ func Execute(actions []Action, openclawHome, picoClawHome string) *Result {
 				fmt.Printf("  ✓ Copied %s\n", relPath(action.Source, openclawHome))
 			}
 		case ActionCopy:
-			if err := os.MkdirAll(filepath.Dir(action.Destination), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(action.Destination), 0o755); err != nil {
 				result.Errors = append(result.Errors, err)
 				continue
 			}
@@ -221,12 +225,12 @@ func executeConfigMigration(srcConfigPath, dstConfigPath, picoClawHome string) e
 	if _, err := os.Stat(dstConfigPath); err == nil {
 		existing, err := config.LoadConfig(dstConfigPath)
 		if err != nil {
-			return fmt.Errorf("loading existing PicoClaw config: %w", err)
+			return fmt.Errorf("loading existing PicoOraClaw config: %w", err)
 		}
 		incoming = MergeConfig(existing, incoming)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dstConfigPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dstConfigPath), 0o755); err != nil {
 		return err
 	}
 	return config.SaveConfig(dstConfigPath, incoming)
@@ -326,7 +330,7 @@ func resolveOpenClawHome(override string) (string, error) {
 	return filepath.Join(home, ".openclaw"), nil
 }
 
-func resolvePicoClawHome(override string) (string, error) {
+func resolvePicoOraClawHome(override string) (string, error) {
 	if override != "" {
 		return expandHome(override), nil
 	}

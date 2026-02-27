@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jasperan/picooraclaw/pkg/config"
 	"github.com/mymmrac/telego"
+
+	"github.com/jasperan/picooraclaw/pkg/config"
 )
 
 type TelegramCommander interface {
@@ -41,7 +42,7 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 /help - Show this help message
 /show [model|channel] - Show current configuration
 /list [models|channels] - List available options
-`
+	`
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
 		Text:   msg,
@@ -55,7 +56,7 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 func (c *cmd) Start(ctx context.Context, message telego.Message) error {
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
-		Text:   "Hello! I am PicoOraClaw",
+		Text:   "Hello! I am PicoOraClaw 🦞",
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
@@ -80,7 +81,7 @@ func (c *cmd) Show(ctx context.Context, message telego.Message) error {
 	switch args {
 	case "model":
 		response = fmt.Sprintf("Current Model: %s (Provider: %s)",
-			c.config.Agents.Defaults.Model,
+			c.config.Agents.Defaults.GetModelName(),
 			c.config.Agents.Defaults.Provider)
 	case "channel":
 		response = "Current Channel: telegram"
@@ -118,8 +119,8 @@ func (c *cmd) List(ctx context.Context, message telego.Message) error {
 		if provider == "" {
 			provider = "configured default"
 		}
-		response = fmt.Sprintf("Configured Model: %s\nProvider: %s\n\nTo change models, update config.json",
-			c.config.Agents.Defaults.Model, provider)
+		response = fmt.Sprintf("Configured Model: %s\nProvider: %s\n\nTo change models, update config.yaml",
+			c.config.Agents.Defaults.GetModelName(), provider)
 
 	case "channels":
 		var enabled []string

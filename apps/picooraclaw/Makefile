@@ -1,4 +1,4 @@
-.PHONY: all build install uninstall clean help test orm-zip
+.PHONY: all build install uninstall clean help test
 
 # Build variables
 BINARY_NAME=picooraclaw
@@ -11,16 +11,21 @@ VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GIT_COMMIT=$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date +%FT%T%z)
 GO_VERSION=$(shell $(GO) version | awk '{print $$3}')
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME) -X main.goVersion=$(GO_VERSION)"
+INTERNAL=github.com/jasperan/picooraclaw/cmd/picooraclaw/internal
+LDFLAGS=-ldflags "-X $(INTERNAL).version=$(VERSION) -X $(INTERNAL).gitCommit=$(GIT_COMMIT) -X $(INTERNAL).buildTime=$(BUILD_TIME) -X $(INTERNAL).goVersion=$(GO_VERSION) -s -w"
 
 # Go variables
-GO?=go
-GOFLAGS?=-v
+GO?=CGO_ENABLED=0 go
+GOFLAGS?=-v -tags stdjson
+
+# Golangci-lint
+GOLANGCI_LINT?=golangci-lint
 
 # Installation
 INSTALL_PREFIX?=$(HOME)/.local
 INSTALL_BIN_DIR=$(INSTALL_PREFIX)/bin
 INSTALL_MAN_DIR=$(INSTALL_PREFIX)/share/man/man1
+INSTALL_TMP_SUFFIX=.new
 
 # Workspace and Skills
 PICOCLAW_HOME?=$(HOME)/.picooraclaw
@@ -39,6 +44,10 @@ ifeq ($(UNAME_S),Linux)
 		ARCH=amd64
 	else ifeq ($(UNAME_M),aarch64)
 		ARCH=arm64
+	else ifeq ($(UNAME_M),armv81)
+		ARCH=arm64
+	else ifeq ($(UNAME_M),loongarch64)
+		ARCH=loong64
 	else ifeq ($(UNAME_M),riscv64)
 		ARCH=riscv64
 	else
@@ -70,7 +79,7 @@ generate:
 	@$(GO) generate ./...
 	@echo "Run generate complete"
 
-## build: Build the picooraclaw binary for current platform
+## build: Build the picoclaw binary for current platform
 build: generate
 	@echo "Building $(BINARY_NAME) for $(PLATFORM)/$(ARCH)..."
 	@mkdir -p $(BUILD_DIR)
@@ -78,27 +87,31 @@ build: generate
 	@echo "Build complete: $(BINARY_PATH)"
 	@ln -sf $(BINARY_NAME)-$(PLATFORM)-$(ARCH) $(BUILD_DIR)/$(BINARY_NAME)
 
-## build-all: Build picooraclaw for all platforms
+## build-all: Build picoclaw for all platforms
 build-all: generate
 	@echo "Building for multiple platforms..."
 	@mkdir -p $(BUILD_DIR)
 	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
 	GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./$(CMD_DIR)
+	GOOS=linux GOARCH=loong64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-loong64 ./$(CMD_DIR)
 	GOOS=linux GOARCH=riscv64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-riscv64 ./$(CMD_DIR)
+	GOOS=linux GOARCH=arm GOARM=7 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-armv7 ./$(CMD_DIR)
 	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./$(CMD_DIR)
 	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
 	@echo "All builds complete"
 
-## install: Install picooraclaw to system and copy builtin skills
+## install: Install picoclaw to system and copy builtin skills
 install: build
 	@echo "Installing $(BINARY_NAME)..."
 	@mkdir -p $(INSTALL_BIN_DIR)
-	@cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_BIN_DIR)/$(BINARY_NAME)
-	@chmod +x $(INSTALL_BIN_DIR)/$(BINARY_NAME)
+	# Copy binary with temporary suffix to ensure atomic update
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_BIN_DIR)/$(BINARY_NAME)$(INSTALL_TMP_SUFFIX)
+	@chmod +x $(INSTALL_BIN_DIR)/$(BINARY_NAME)$(INSTALL_TMP_SUFFIX)
+	@mv -f $(INSTALL_BIN_DIR)/$(BINARY_NAME)$(INSTALL_TMP_SUFFIX) $(INSTALL_BIN_DIR)/$(BINARY_NAME)
 	@echo "Installed binary to $(INSTALL_BIN_DIR)/$(BINARY_NAME)"
 	@echo "Installation complete!"
 
-## uninstall: Remove picooraclaw from system
+## uninstall: Remove picoclaw from system
 uninstall:
 	@echo "Uninstalling $(BINARY_NAME)..."
 	@rm -f $(INSTALL_BIN_DIR)/$(BINARY_NAME)
@@ -106,7 +119,7 @@ uninstall:
 	@echo "Note: Only the executable file has been deleted."
 	@echo "If you need to delete all configurations (config.json, workspace, etc.), run 'make uninstall-all'"
 
-## uninstall-all: Remove picooraclaw and all data
+## uninstall-all: Remove picoclaw and all data
 uninstall-all:
 	@echo "Removing workspace and skills..."
 	@rm -rf $(PICOCLAW_HOME)
@@ -119,46 +132,52 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@echo "Clean complete"
 
-## fmt: Format Go code
+## vet: Run go vet for static analysis
 vet:
 	@$(GO) vet ./...
 
-## fmt: Format Go code
+## test: Test Go code
 test:
 	@$(GO) test ./...
 
 ## fmt: Format Go code
 fmt:
-	@$(GO) fmt ./...
+	@$(GOLANGCI_LINT) fmt
 
-## deps: Update dependencies
+## lint: Run linters
+lint:
+	@$(GOLANGCI_LINT) run
+
+## fix: Fix linting issues
+fix:
+	@$(GOLANGCI_LINT) run --fix
+
+## deps: Download dependencies
 deps:
+	@$(GO) mod download
+	@$(GO) mod verify
+
+## update-deps: Update dependencies
+update-deps:
 	@$(GO) get -u ./...
 	@$(GO) mod tidy
 
-## run: Build and run picooraclaw
+## check: Run vet, fmt, and verify dependencies
+check: deps fmt vet test
+
+## run: Build and run picoclaw
 run: build
 	@$(BUILD_DIR)/$(BINARY_NAME) $(ARGS)
 
-## orm-zip: Build ORM stack zip for "Deploy to OCI" button
-orm-zip:
-	@echo "Building ORM stack zip..."
-	@mkdir -p deploy/oci/orm
-	@cd deploy/oci && zip -r orm/picooraclaw-orm.zip \
-		*.tf *.yaml scripts/ \
-		-x "orm/*" "*.tfstate*" ".terraform/*"
-	@echo "Created deploy/oci/orm/picooraclaw-orm.zip"
-	@ls -lh deploy/oci/orm/picooraclaw-orm.zip
-
 ## help: Show this help message
 help:
-	@echo "picooraclaw Makefile"
+	@echo "picoclaw Makefile"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make [target]"
 	@echo ""
 	@echo "Targets:"
-	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## /  /'
+	@grep -E '^## ' $(MAKEFILE_LIST) | sort | awk -F': ' '{printf "  %-16s %s\n", substr($$1, 4), $$2}'
 	@echo ""
 	@echo "Examples:"
 	@echo "  make build              # Build for current platform"
@@ -176,3 +195,11 @@ help:
 	@echo "  Binary: $(BINARY_PATH)"
 	@echo "  Install Prefix: $(INSTALL_PREFIX)"
 	@echo "  Workspace: $(WORKSPACE_DIR)"
+
+## orm-zip: Build OCI Resource Manager stack zip for Deploy to Oracle Cloud button
+.PHONY: orm-zip
+orm-zip:
+	@echo "Building ORM deploy stack..."
+	@mkdir -p deploy/oci/orm
+	@cd deploy/oci && zip -r orm/picooraclaw-orm.zip *.tf *.yaml scripts/ -x 'orm/*'
+	@echo "Created deploy/oci/orm/picooraclaw-orm.zip"
