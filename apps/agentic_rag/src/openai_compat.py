@@ -10,112 +10,58 @@ Now uses ReasoningInterceptor directly (like CLI arena mode) for
 full multi-step streaming output from reasoning agents with real-time
 chunk-by-chunk streaming.
 """
-
 import json
 import time
 import uuid
 import asyncio
 import re
+import os
 import queue
 import threading
 import sys
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, AsyncGenerator, Union
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-# Import ReasoningInterceptor for direct Ollama-like streaming
+logger = logging.getLogger(__name__)
+
 try:
     from agent_reasoning import ReasoningInterceptor
     INTERCEPTOR_AVAILABLE = True
 except ImportError:
     INTERCEPTOR_AVAILABLE = False
-    print("⚠️ ReasoningInterceptor not available, falling back to ensemble mode", flush=True)
 
-
-def strip_ansi_codes(text: str) -> str:
-    """Remove ANSI escape codes from text."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
-
-
-def log_a2a_event(method: str, status: str, details: str = "", **kwargs):
-    """
-    Log A2A-style events to stdout (visible in server logs).
-    Mimics the logging format used in gradio_app.py.
-    Forces flush to ensure logs appear immediately in buffered server contexts.
-    """
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    icon = "✅" if status == "success" else "❌" if status == "error" else "🔄"
-
-    extra = " | ".join([f"{k}: {v}" for k, v in kwargs.items() if v])
-    if extra:
-        extra = f" | {extra}"
-
-    print(f"{icon} [{timestamp}] [A2A Event] Method: {method} | Status: {status}{extra}", flush=True)
-    if details:
-        print(f"   └─ {details}", flush=True)
-
-from .openai_models import (
-    ChatCompletionRequest,
-    ChatCompletionResponse,
-    ChatCompletionChoice,
-    ChatCompletionChunk,
-    ChatCompletionChunkChoice,
-    ChatMessage,
-    DeltaContent,
-    ModelList,
-    ModelInfo,
-    UsageInfo,
-    ErrorResponse,
-    ErrorDetail,
-    ContentPart,
-    FileAttachment,
-    REASONING_MODELS,
-    get_model_list,
-    get_model_config,
+from openai_models import (
+    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChoice,
+    ChatCompletionChunk, ChatCompletionChunkChoice, ChatMessage, DeltaContent,
+    ModelList, ModelInfo, UsageInfo, ErrorResponse, ErrorDetail, ContentPart,
+    FileAttachment, REASONING_MODELS, get_model_list, get_model_config
 )
+from web_processor import WebProcessor, is_url
 
-# Import WebProcessor for URL fetching
-try:
-    from .web_processor import WebProcessor, is_url
-except ImportError:
-    try:
-        from web_processor import WebProcessor, is_url
-    except ImportError:
-        WebProcessor = None
-        is_url = lambda x: False
-        print("⚠️ WebProcessor not available, Upload Link persistence disabled", flush=True)
+router = APIRouter(prefix='/v1', tags=['OpenAI Compatible'])
 
-# Router for OpenAI-compatible endpoints
-router = APIRouter(prefix="/v1", tags=["OpenAI Compatible"])
-
-# Global references to be set during initialization
 _vector_store = None
 _reasoning_ensemble = None
 _local_agent = None
 _config = {}
-_interceptor = None  # ReasoningInterceptor for direct agent streaming
-_event_logger = None  # Oracle DB event logger for tracking all events
-_file_handler = None  # FileHandler for @file reference processing
-_a2a_handler = None  # A2AHandler for routing through A2A protocol
+_interceptor = None
+_event_logger = None
+_file_handler = None
+_a2a_handler = None
 
 
-def init_openai_compat(
-    vector_store,
-    reasoning_ensemble=None,
-    local_agent=None,
-    config: Optional[Dict[str, Any]] = None,
-    event_logger=None,
-    file_handler=None,
-    a2a_handler=None
-):
+def init_openai_compat(vector_store, reasoning_ensemble, local_agent=None,
+                       config=None, event_logger=None, file_handler=None,
+                       a2a_handler=None):
     """
     Initialize the OpenAI-compatible API with required dependencies.
 
     Args:
-        vector_store: VectorStore or OraDBVectorStore instance
+        vector_store: OraDBVectorStore instance
         reasoning_ensemble: RAGReasoningEnsemble instance (optional)
         local_agent: LocalRAGAgent instance for fallback (optional)
         config: Configuration dict (optional)
@@ -123,26 +69,47 @@ def init_openai_compat(
         file_handler: FileHandler instance for @file processing (optional)
         a2a_handler: A2AHandler instance for A2A protocol routing (optional)
     """
-    global _vector_store, _reasoning_ensemble, _local_agent, _config, _interceptor, _event_logger, _file_handler, _a2a_handler
+    global _vector_store, _reasoning_ensemble, _local_agent, _config
+    global _event_logger, _file_handler, _a2a_handler, _interceptor
+
     _vector_store = vector_store
     _reasoning_ensemble = reasoning_ensemble
     _local_agent = local_agent
-    _config = config or {}
+    _config = config if config else {}
     _event_logger = event_logger
     _file_handler = file_handler
     _a2a_handler = a2a_handler
 
-    # Initialize ReasoningInterceptor for direct agent streaming (like CLI arena mode)
     if INTERCEPTOR_AVAILABLE:
-        try:
-            _interceptor = ReasoningInterceptor(host="http://localhost:11434")
-            print("✅ ReasoningInterceptor initialized for direct agent streaming", flush=True)
-        except Exception as e:
-            print(f"⚠️ Failed to initialize ReasoningInterceptor: {e}", flush=True)
-            _interceptor = None
+        _interceptor = ReasoningInterceptor(host=os.getenv('OLLAMA_HOST', 'http://127.0.0.1:11434'))
+        print('✅ ReasoningInterceptor initialized for direct agent streaming', flush=True)
 
 
-async def unified_rag_search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+def strip_ansi_codes(text):
+    """Remove ANSI escape codes from text."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+
+def log_a2a_event(method, status, details, **kwargs):
+    """
+    Log A2A-style events to stdout (visible in server logs).
+    Mimics the logging format used in gradio_app.py.
+    Forces flush to ensure logs appear immediately in buffered server contexts.
+    """
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    if status == 'success':
+        icon = '✅'
+    elif status == 'error':
+        icon = '❌'
+    else:
+        icon = '🔄'
+    print(f'[{timestamp}] {icon} [{method}] {status}: {details}', flush=True)
+    for key, value in kwargs.items():
+        print(f'    {key}: {value}', flush=True)
+
+
+async def unified_rag_search(query, top_k=5):
     """
     Search across all collections (PDF, Web, Repository) and return unified results.
 
@@ -157,150 +124,95 @@ async def unified_rag_search(query: str, top_k: int = 5) -> List[Dict[str, Any]]
         return []
 
     all_results = []
-    search_start_time = time.time()
 
-    # Query each collection
-    collections = [
-        ("pdf_documents", "query_pdf_collection"),
-        ("web_documents", "query_web_collection"),
-        ("repository_documents", "query_repo_collection"),
-    ]
+    try:
+        # Query all collections in parallel using thread pool
+        loop = asyncio.get_event_loop()
 
-    for collection_name, method_name in collections:
-        try:
-            if hasattr(_vector_store, method_name):
-                method = getattr(_vector_store, method_name)
-                results = method(query, n_results=top_k)
+        pdf_results = await loop.run_in_executor(
+            None, lambda: _vector_store.query_pdf_collection(query, top_k)
+        )
+        for r in pdf_results:
+            r['collection'] = 'PDF'
+        all_results.extend(pdf_results)
+    except Exception as e:
+        logger.warning(f'PDF collection query failed: {e}')
 
-                # Normalize results format
-                if results:
-                    for result in results:
-                        if isinstance(result, dict):
-                            result["collection"] = collection_name
-                            all_results.append(result)
-        except Exception as e:
-            print(f"Error querying {collection_name}: {e}", flush=True)
-            continue
+    try:
+        loop = asyncio.get_event_loop()
+        web_results = await loop.run_in_executor(
+            None, lambda: _vector_store.query_web_collection(query, top_k)
+        )
+        for r in web_results:
+            r['collection'] = 'Web'
+        all_results.extend(web_results)
+    except Exception as e:
+        logger.warning(f'Web collection query failed: {e}')
 
-    # Sort by score (if available) and take top_k
-    def get_score(item):
-        if isinstance(item, dict):
-            # Try different score field names
-            for key in ["score", "distance", "similarity"]:
-                if key in item:
-                    score = item[key]
-                    # Invert distance scores (lower is better)
-                    if key == "distance":
-                        return -score
-                    return score
-        return 0
+    try:
+        loop = asyncio.get_event_loop()
+        repo_results = await loop.run_in_executor(
+            None, lambda: _vector_store.query_repo_collection(query, top_k)
+        )
+        for r in repo_results:
+            r['collection'] = 'Repository'
+        all_results.extend(repo_results)
+    except Exception as e:
+        logger.warning(f'Repo collection query failed: {e}')
 
-    all_results.sort(key=get_score, reverse=True)
-    final_results = all_results[:top_k]
-
-    # Log RAG query to Oracle DB
-    if _event_logger and final_results:
-        try:
-            query_duration_ms = (time.time() - search_start_time) * 1000
-            _event_logger.log_query_event(
-                query_text=query[:500],  # Truncate for DB
-                collection_name="unified_rag",
-                results_count=len(final_results),
-                query_time_ms=query_duration_ms,
-                metadata={
-                    "collections_searched": [c[0] for c in collections],
-                    "top_k": top_k
-                }
-            )
-        except Exception as e:
-            print(f"[EventLogger] Error logging RAG query to Oracle DB: {e}", flush=True)
-
-    return final_results
+    # Sort by score descending and return top_k
+    all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+    return all_results[:top_k]
 
 
-def build_rag_context(results: List[Dict[str, Any]]) -> str:
+def build_rag_context(results):
     """Build context string from RAG results."""
     if not results:
-        return ""
-
-    context_parts = ["Here is relevant context from the knowledge base:\n"]
-
+        return ''
+    context_parts = [
+        'Here is relevant context from the knowledge base:\n']
     for i, result in enumerate(results, 1):
-        content = result.get("content", result.get("text", ""))
-        source = result.get("metadata", {}).get("source", result.get("collection", "Unknown"))
-
-        context_parts.append(f"[{i}] Source: {source}")
-        context_parts.append(f"{content}\n")
-
+        content = result.get('content', result.get('text', ''))
+        source = result.get('metadata', {}).get('source', result.get('collection', 'Unknown'))
+        context_parts.append(f'[{i}] Source: {source}')
+        context_parts.append(f'{content}\n')
     context_parts.append("\nUse the above context to help answer the user's question.\n")
-    return "\n".join(context_parts)
+    return '\n'.join(context_parts)
 
 
-def format_rag_sources_for_display(results: List[Dict[str, Any]]) -> str:
+def format_rag_sources_for_display(results):
     """
     Format RAG sources for visual display in Open WebUI.
     Returns a markdown-formatted string showing retrieved documents.
     """
     if not results:
-        return ""
-
+        return ''
     lines = [
-        "---",
-        "📚 **Retrieved Knowledge Sources**",
-        ""
-    ]
-
+        '---',
+        '📚 **Retrieved Knowledge Sources**',
+        '']
     for i, result in enumerate(results, 1):
-        metadata = result.get("metadata", {})
-        content = result.get("content", result.get("text", ""))
-        score = result.get("score")
-        collection = result.get("collection", "unknown")
-
-        # Extract source info
-        source = metadata.get("source", metadata.get("url", metadata.get("file_path", "Unknown")))
-        doc_type = metadata.get("type", collection.replace("_documents", "").upper())
-        page = metadata.get("page", metadata.get("page_number"))
-        chunk_id = metadata.get("chunk_id", metadata.get("id", ""))
-
-        # Format score as percentage if available
-        score_str = f" | Relevance: {score:.1%}" if score is not None else ""
-
-        # Build source line
-        source_line = f"**[{i}]** 📄 `{doc_type}`{score_str}"
-        lines.append(source_line)
-
-        # Add source path/URL
-        if source and source != "Unknown":
-            # Truncate long paths
-            display_source = source if len(source) <= 60 else "..." + source[-57:]
-            lines.append(f"   📍 Source: `{display_source}`")
-
-        # Add page info if available
-        if page:
-            lines.append(f"   📑 Page: {page}")
-
-        # Add content preview (first 150 chars)
-        preview = content[:150].replace("\n", " ").strip()
-        if len(content) > 150:
-            preview += "..."
-        lines.append(f"   > _{preview}_")
-        lines.append("")
-
-    lines.append("---")
-    lines.append("")
-
-    return "\n".join(lines)
+        source = result.get('metadata', {}).get('source', result.get('collection', 'Unknown'))
+        collection = result.get('collection', 'Unknown')
+        score = result.get('score', 0)
+        content_preview = result.get('content', result.get('text', ''))[:150]
+        if len(result.get('content', result.get('text', ''))) > 150:
+            content_preview += '...'
+        lines.append(f'**{i}.** [{collection}] `{source}` (score: {score:.2f})')
+        lines.append(f'> {content_preview}')
+        lines.append('')
+    lines.append('---')
+    lines.append('')
+    return '\n'.join(lines)
 
 
-async def process_file_references(
-    message: str
-) -> tuple[str, str, List[Dict[str, Any]]]:
+async def process_file_references(message):
     """
     Process @file and @@file references in a message.
 
     Patterns:
-    - @filename.ext → temporary context (inject into current query)
-    - @@filename.ext → permanent storage (add to RAG, then inject)
+    - @filename.ext -> temporary context (inject into current query)
+    - @@filename.ext -> permanent storage (add to RAG, then inject)
 
     Args:
         message: The user message containing file references
@@ -309,160 +221,107 @@ async def process_file_references(
         Tuple of (cleaned_message, file_context, file_display_info)
     """
     if not _file_handler:
-        return message, "", []
+        return message, '', []
 
-    # Import the parser
-    try:
-        from .file_handler import parse_file_references
-    except ImportError:
-        from file_handler import parse_file_references
-
-    cleaned_message, references = parse_file_references(message)
-
-    if not references:
-        return message, "", []
-
-    file_context_parts = []
     file_display_info = []
+    file_context = ''
 
-    for ref in references:
-        filepath = ref["filepath"]
-        permanent = ref["permanent"]
+    # Find @@file references (permanent storage)
+    permanent_pattern = re.compile(r'@@(\S+)')
+    permanent_refs = permanent_pattern.findall(message)
 
-        log_a2a_event(
-            "file.reference",
-            "processing",
-            f"{'@@' if permanent else '@'}{filepath}",
-            permanent=permanent
-        )
+    # Find @file references (temporary context) - but not @@ ones
+    temp_pattern = re.compile(r'(?<!@)@(\S+)')
+    temp_refs = temp_pattern.findall(message)
 
-        # Find the file
-        found_path = _file_handler.find_file(filepath)
+    cleaned_message = message
 
-        if not found_path:
-            log_a2a_event("file.reference", "error", f"File not found: {filepath}")
-            file_display_info.append({
-                "filename": filepath,
-                "status": "not_found",
-                "error": "File not found"
-            })
-            continue
-
+    for filename in permanent_refs:
+        cleaned_message = cleaned_message.replace(f'@@{filename}', '').strip()
         try:
-            if permanent:
-                # Add to RAG and inject context
-                result = _file_handler.add_to_rag(found_path, "GENERALCOLLECTION")
-                log_a2a_event(
-                    "file.reference",
-                    "success",
-                    f"Added to RAG: {filepath}",
-                    chunks=result.get("chunks_stored", 0)
-                )
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, lambda f=filename: _file_handler.process_file(f, permanent=True)
+            )
+            if result and result.get('content'):
+                file_context += f'\n\n--- Content from {filename} ---\n{result["content"]}\n'
+                file_display_info.append({
+                    'filename': filename,
+                    'status': 'success',
+                    'storage_mode': 'permanent',
+                    'chunks': result.get('chunks_stored', 0)
+                })
             else:
-                # Just process for temporary context
-                result = _file_handler.add_temporary(found_path)
-                log_a2a_event(
-                    "file.reference",
-                    "success",
-                    f"Temporary context: {filepath}",
-                    chunks=len(result.get("chunks", []))
-                )
-
-            # Build context from file content
-            content = result.get("content", "")
-            if content:
-                file_context_parts.append(
-                    f"--- Content from {filepath} ---\n{content}\n--- End of {filepath} ---"
-                )
-
-            file_display_info.append({
-                "filename": found_path.name,
-                "path": str(found_path),
-                "status": "success",
-                "storage_mode": "permanent" if permanent else "temporary",
-                "chunks": len(result.get("chunks", [])),
-                "content_preview": content[:200] + "..." if len(content) > 200 else content
-            })
-
+                file_display_info.append({
+                    'filename': filename,
+                    'status': 'error',
+                    'storage_mode': 'permanent',
+                    'error': 'File not found or empty'
+                })
         except Exception as e:
-            log_a2a_event("file.reference", "error", f"Failed to process {filepath}: {e}")
+            logger.error(f'Error processing @@{filename}: {e}')
             file_display_info.append({
-                "filename": filepath,
-                "status": "error",
-                "error": str(e)
+                'filename': filename,
+                'status': 'error',
+                'storage_mode': 'permanent',
+                'error': str(e)
             })
 
-    # Combine file contexts
-    file_context = "\n\n".join(file_context_parts) if file_context_parts else ""
+    for filename in temp_refs:
+        cleaned_message = cleaned_message.replace(f'@{filename}', '').strip()
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, lambda f=filename: _file_handler.process_file(f, permanent=False)
+            )
+            if result and result.get('content'):
+                file_context += f'\n\n--- Content from {filename} ---\n{result["content"]}\n'
+                file_display_info.append({
+                    'filename': filename,
+                    'status': 'success',
+                    'storage_mode': 'temporary'
+                })
+            else:
+                file_display_info.append({
+                    'filename': filename,
+                    'status': 'error',
+                    'storage_mode': 'temporary',
+                    'error': 'File not found or empty'
+                })
+        except Exception as e:
+            logger.error(f'Error processing @{filename}: {e}')
+            file_display_info.append({
+                'filename': filename,
+                'status': 'error',
+                'storage_mode': 'temporary',
+                'error': str(e)
+            })
 
     return cleaned_message, file_context, file_display_info
 
 
-def format_file_references_for_display(file_info: List[Dict[str, Any]]) -> str:
+def format_file_references_for_display(file_info):
     """
     Format file references for visual display in Open WebUI.
     """
     if not file_info:
-        return ""
-
+        return ''
     lines = [
-        "---",
-        "📎 **Referenced Files**",
-        ""
-    ]
-
+        '---',
+        '📎 **Referenced Files**',
+        '']
     for f in file_info:
-        status_icon = "✅" if f["status"] == "success" else "❌"
-        mode_icon = "💾" if f.get("storage_mode") == "permanent" else "📎"
-
-        if f["status"] == "success":
-            lines.append(f"{status_icon} {mode_icon} **{f['filename']}**")
-            if f.get("chunks"):
-                lines.append(f"   └─ {f['chunks']} chunks processed")
+        status_icon = '✅' if f['status'] == 'success' else '❌'
+        mode_icon = '💾' if f.get('storage_mode') == 'permanent' else '📎'
+        if f['status'] == 'success':
+            lines.append(f'{status_icon} {mode_icon} **{f["filename"]}**')
         else:
-            lines.append(f"{status_icon} **{f['filename']}**: {f.get('error', 'Unknown error')}")
-
-        lines.append("")
-
-    lines.append("---")
-    lines.append("")
-
-    return "\n".join(lines)
+            lines.append(f'{status_icon} {mode_icon} **{f["filename"]}** - {f.get("error", "Unknown error")}')
+        lines.append('')
+    lines.append('---')
+    lines.append('')
+    return '\n'.join(lines)
 
 
-@router.get("/models", response_model=ModelList)
-async def list_models():
-    """
-    List available models (reasoning strategies).
-
-    OpenAI-compatible endpoint that returns the list of available
-    "models" which map to reasoning strategies in our system.
-    """
-    return get_model_list()
-
-
-@router.get("/models/{model_id}")
-async def get_model(model_id: str):
-    """Get information about a specific model."""
-    config = get_model_config(model_id)
-    if not config:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"message": f"Model '{model_id}' not found", "type": "invalid_request_error", "code": "model_not_found"}}
-        )
-
-    return ModelInfo(
-        id=model_id,
-        name=config["name"],
-        description=config.get("description")
-    )
-
-
-async def run_interceptor_streaming(
-    model_name: str,
-    query: str,
-    strategy: str
-) -> AsyncGenerator[str, None]:
+def run_interceptor_streaming(model_name, query, strategy):
     """
     Run the ReasoningInterceptor in a thread with REAL-TIME streaming.
 
@@ -470,95 +329,51 @@ async def run_interceptor_streaming(
     and the async generator, enabling true chunk-by-chunk streaming
     just like CLI arena mode.
     """
-    # Queue for real-time chunk communication
-    chunk_queue: queue.Queue = queue.Queue()
-    SENTINEL = object()  # Marks end of stream
-    thread_error = [None]  # Mutable container to capture thread errors
+    result_queue = queue.Queue()
 
-    def run_interceptor_thread():
-        """Run interceptor in thread, pushing chunks to queue."""
+    def _run():
         try:
-            log_a2a_event(
-                f"reasoning.{strategy}",
-                "started",
-                f"Model: {model_name}",
-                query_preview=query[:50] + "..."
-            )
+            # Build the model string with strategy tag (e.g., "gemma3:latest+cot")
+            model_with_strategy = f'{model_name}+{strategy}'
+            log_a2a_event('interceptor.generate', 'started',
+                          f'Model: {model_with_strategy}, Query length: {len(query)}')
 
-            start_time = time.time()
-            chunk_count = 0
-
-            for chunk_dict in _interceptor.generate(
-                model=model_name,
+            # Use streaming mode to get chunks in real-time
+            stream = _interceptor.generate(
+                model=model_with_strategy,
                 prompt=query,
                 stream=True
-            ):
-                chunk_text = chunk_dict.get("response", "")
-                if chunk_text:
-                    # Log significant chunks (step markers, observations)
-                    if "--- Step" in chunk_text:
-                        log_a2a_event(f"reasoning.{strategy}", "step", chunk_text.strip()[:60])
-                    elif "Observation:" in chunk_text:
-                        log_a2a_event(f"reasoning.{strategy}", "observation", "Code execution result")
-                    elif "FINAL ANSWER" in chunk_text:
-                        log_a2a_event(f"reasoning.{strategy}", "complete", "Final answer found")
-
-                    chunk_queue.put(chunk_text)
-                    chunk_count += 1
-
-            duration_ms = (time.time() - start_time) * 1000
-            log_a2a_event(
-                f"reasoning.{strategy}",
-                "success",
-                f"Completed in {duration_ms:.0f}ms",
-                chunks=chunk_count
             )
 
-        except Exception as e:
-            log_a2a_event(f"reasoning.{strategy}", "error", str(e))
-            thread_error[0] = e
-            chunk_queue.put(f"\n\n❌ Error: {str(e)}")
-        finally:
-            chunk_queue.put(SENTINEL)
+            for chunk in stream:
+                response_text = chunk.get('response', '')
+                if response_text:
+                    # Strip ANSI codes from reasoning output
+                    clean_text = strip_ansi_codes(response_text)
+                    if clean_text:
+                        result_queue.put(('chunk', clean_text))
 
-    # Start interceptor in background thread
-    thread = threading.Thread(target=run_interceptor_thread, daemon=True)
+                if chunk.get('done', False):
+                    break
+
+            result_queue.put(('done', None))
+            log_a2a_event('interceptor.generate', 'success',
+                          f'Completed streaming for {model_with_strategy}')
+
+        except Exception as e:
+            logger.error(f'Interceptor streaming error: {e}')
+            result_queue.put(('error', str(e)))
+
+    thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
-    # Yield chunks as they arrive (real-time streaming)
-    # Increased timeout for complex reasoning strategies like decomposed/least-to-most
-    max_idle_iterations = 2400  # ~120 seconds max idle time (2400 * 0.05s)
-    idle_count = 0
-
-    try:
-        while True:
-            try:
-                # Non-blocking check with small timeout for async compatibility
-                chunk = chunk_queue.get(timeout=0.05)
-                idle_count = 0  # Reset on successful get
-                if chunk is SENTINEL:
-                    break
-                yield chunk
-            except queue.Empty:
-                idle_count += 1
-                if idle_count > max_idle_iterations:
-                    log_a2a_event(f"reasoning.{strategy}", "timeout", "Stream idle timeout")
-                    yield "\n\n⚠️ Stream timeout - no response received"
-                    break
-                # No chunk yet, yield control back to event loop
-                await asyncio.sleep(0.01)
-                continue
-    finally:
-        # Ensure thread cleanup
-        thread.join(timeout=2.0)
-        if thread.is_alive():
-            log_a2a_event(f"reasoning.{strategy}", "warning", "Thread still running after timeout")
+    return result_queue
 
 
 async def generate_streaming_response(
     request: ChatCompletionRequest,
     model_config: Dict[str, Any],
-    rag_context: str = "",
+    rag_context: str,
     rag_results: Optional[List[Dict[str, Any]]] = None,
     file_display_info: Optional[List[Dict[str, Any]]] = None
 ) -> AsyncGenerator[str, None]:
@@ -577,846 +392,237 @@ async def generate_streaming_response(
     When file_display_info is provided, displays the referenced files
     before RAG sources.
     """
-    import traceback
-    from .settings import get_current_model
-
-    request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    completion_id = f'chatcmpl-{uuid.uuid4().hex[:12]}'
     created = int(time.time())
-    strategy = model_config["strategy"]
-    start_time = time.time()
+    model_name = request.model
 
-    # Log request start
-    log_a2a_event(
-        "chat.completions",
-        "started",
-        f"Strategy: {strategy}",
-        request_id=request_id,
-        model=request.model
-    )
+    def make_chunk(content=None, role=None, finish_reason=None):
+        """Create an SSE-formatted chunk."""
+        delta = {}
+        if role:
+            delta['role'] = role
+        if content:
+            delta['content'] = content
 
-    # Get the user's query (last user message)
-    user_query = ""
-    for msg in reversed(request.messages):
-        if msg.role.value == "user" and msg.content:
-            user_query = msg.content
+        chunk_data = {
+            'id': completion_id,
+            'object': 'chat.completion.chunk',
+            'created': created,
+            'model': model_name,
+            'choices': [{
+                'index': 0,
+                'delta': delta,
+                'finish_reason': finish_reason
+            }]
+        }
+        return f'data: {json.dumps(chunk_data)}\n\n'
+
+    # Send initial role chunk
+    yield make_chunk(role='assistant')
+
+    # Display file references if present
+    if file_display_info:
+        file_display = format_file_references_for_display(file_display_info)
+        if file_display:
+            yield make_chunk(content=file_display)
+
+    # Display RAG sources if present
+    if rag_results:
+        sources_display = format_rag_sources_for_display(rag_results)
+        if sources_display:
+            yield make_chunk(content=sources_display)
+
+    strategy = model_config.get('strategy', 'standard')
+    is_reasoning = model_config.get('is_reasoning', False)
+    base_model = _config.get('model_name', 'qwen3.5:9b')
+
+    # Build the full prompt with context
+    messages = request.messages
+    last_message = ''
+    for msg in reversed(messages):
+        if msg.role == 'user' or (hasattr(msg.role, 'value') and msg.role.value == 'user'):
+            last_message = extract_text_from_content(msg.content)
             break
 
-    if not user_query:
-        log_a2a_event("chat.completions", "error", "No user message found")
-        error_chunk = ChatCompletionChunk(
-            id=request_id,
-            created=created,
-            model=request.model,
-            choices=[ChatCompletionChunkChoice(
-                index=0,
-                delta=DeltaContent(content="Error: No user message found"),
-                finish_reason="stop"
-            )]
-        )
-        yield f"data: {error_chunk.model_dump_json()}\n\n"
-        yield "data: [DONE]\n\n"
-        return
-
-    log_a2a_event(
-        "chat.query",
-        "received",
-        f"Query: {user_query[:80]}{'...' if len(user_query) > 80 else ''}"
-    )
-
-    # Build augmented query with RAG context
-    augmented_query = user_query
+    full_prompt = last_message
     if rag_context:
-        log_a2a_event("rag.context", "applied", f"Context length: {len(rag_context)} chars")
-        augmented_query = f"{rag_context}\n\nUser Question: {user_query}"
+        full_prompt = f'{rag_context}\n\nUser Question: {last_message}'
 
-    # Track if we've sent the initial role chunk
-    initial_sent = False
-
-    # Stream file references first if available
-    if file_display_info and len(file_display_info) > 0:
-        file_refs_text = format_file_references_for_display(file_display_info)
-        if file_refs_text:
-            log_a2a_event("file.references", "displaying", f"{len(file_display_info)} files")
-
-            # Send initial role chunk
-            initial_chunk = ChatCompletionChunk(
-                id=request_id,
-                created=created,
-                model=request.model,
-                choices=[ChatCompletionChunkChoice(
-                    index=0,
-                    delta=DeltaContent(role="assistant"),
-                    finish_reason=None
-                )]
-            )
-            yield f"data: {initial_chunk.model_dump_json()}\n\n"
-            initial_sent = True
-
-            # Stream file references in chunks
-            chunk_size = 80
-            for i in range(0, len(file_refs_text), chunk_size):
-                text_chunk = file_refs_text[i:i + chunk_size]
-                content_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=text_chunk),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {content_chunk.model_dump_json()}\n\n"
-                await asyncio.sleep(0.005)
-
-    # Stream RAG sources if available (for visual display in UI)
-    rag_sources_displayed = False
-    if rag_results and len(rag_results) > 0:
-        rag_sources_text = format_rag_sources_for_display(rag_results)
-        if rag_sources_text:
-            log_a2a_event("rag.sources", "displaying", f"{len(rag_results)} sources")
-
-            # Send initial role chunk only if not already sent
-            if not initial_sent:
-                initial_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(role="assistant"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {initial_chunk.model_dump_json()}\n\n"
-                initial_sent = True
-
-            # Stream RAG sources in chunks for smooth display
-            chunk_size = 80
-            for i in range(0, len(rag_sources_text), chunk_size):
-                text_chunk = rag_sources_text[i:i + chunk_size]
-                content_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=text_chunk),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {content_chunk.model_dump_json()}\n\n"
-                await asyncio.sleep(0.005)
-
-            rag_sources_displayed = True
-
-    # PRIORITY 1: Use ReasoningInterceptor directly (like CLI arena mode)
-    # This provides full multi-step streaming output with real-time chunks
-    if INTERCEPTOR_AVAILABLE and _interceptor:
-        interceptor_started = False
+    # Use ReasoningInterceptor for reasoning models when available
+    if _interceptor and INTERCEPTOR_AVAILABLE and is_reasoning:
         try:
-            # Get current model from settings
-            base_model = get_current_model()
-            # Build model name in interceptor format: base_model+strategy
-            interceptor_model = f"{base_model}+{strategy}"
+            log_a2a_event('openai.streaming', 'started',
+                          f'Using ReasoningInterceptor with strategy: {strategy}')
 
-            # Log A2A event for reasoning request START
-            if _a2a_handler and _a2a_handler.event_logger:
-                _a2a_handler.event_logger.log_a2a_event(
-                    agent_id=f"reasoning_{strategy}_v1",
-                    agent_name=f"Reasoning Agent ({strategy})",
-                    method="reasoning.stream",
-                    user_prompt=user_query[:500],
-                    response="[streaming started]",
-                    metadata={
-                        "request_id": request_id,
-                        "model": interceptor_model,
-                        "strategy": strategy,
-                        "use_rag": bool(rag_context),
-                        "source": "openai_compat"
-                    },
-                    duration_ms=0,
-                    status="started"
-                )
+            result_queue = run_interceptor_streaming(base_model, full_prompt, strategy)
 
-            log_a2a_event(
-                "reasoning.dispatch",
-                "started",
-                f"Using ReasoningInterceptor",
-                model=interceptor_model,
-                strategy=strategy
-            )
-
-            # Send initial role chunk only if not already sent
-            if not initial_sent:
-                initial_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(role="assistant"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {initial_chunk.model_dump_json()}\n\n"
-            else:
-                # Add a separator between file refs/RAG sources and reasoning response
-                separator = "\n\n🤖 **Agent Response**\n\n"
-                sep_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=separator),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {sep_chunk.model_dump_json()}\n\n"
-
-            interceptor_started = True
-
-            # Stream directly from interceptor (like CLI arena mode) - REAL-TIME
-            full_response = ""
-            start_time = time.time()
-
-            async for chunk in run_interceptor_streaming(interceptor_model, augmented_query, strategy):
-                # Clean ANSI codes from each chunk
-                clean_chunk = strip_ansi_codes(chunk)
-                full_response += clean_chunk
-
-                # Stream each chunk as SSE immediately (real-time)
-                content_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=clean_chunk),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {content_chunk.model_dump_json()}\n\n"
-
-            duration_ms = (time.time() - start_time) * 1000
-            log_a2a_event(
-                "chat.completions",
-                "success",
-                f"Response complete",
-                duration_ms=f"{duration_ms:.0f}",
-                response_length=len(full_response)
-            )
-
-            # Log to Oracle DB
-            if _event_logger:
+            while True:
                 try:
-                    # Log API event
-                    _event_logger.log_api_event(
-                        endpoint="/v1/chat/completions",
-                        method="POST",
-                        request_data={
-                            "model": request.model,
-                            "strategy": strategy,
-                            "stream": True,
-                            "query_preview": user_query[:100]
-                        },
-                        response_data={
-                            "request_id": request_id,
-                            "response_length": len(full_response),
-                            "status": "success"
-                        },
-                        status_code=200,
-                        duration_ms=duration_ms
+                    msg_type, msg_data = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: result_queue.get(timeout=120)
                     )
-                    # Log model event
-                    _event_logger.log_model_event(
-                        model_name=interceptor_model,
-                        model_type="reasoning_interceptor",
-                        user_prompt=user_query,
-                        response=full_response[:2000],  # Truncate for DB
-                        collection_used="unified_rag" if rag_context else None,
-                        use_cot=strategy in ["cot", "tot", "react"],
-                        duration_ms=duration_ms
-                    )
-                except Exception as e:
-                    print(f"[EventLogger] Error logging to Oracle DB: {e}", flush=True)
 
-            # Log A2A event for reasoning request COMPLETION
-            if _a2a_handler and _a2a_handler.event_logger:
-                try:
-                    _a2a_handler.event_logger.log_a2a_event(
-                        agent_id=f"reasoning_{strategy}_v1",
-                        agent_name=f"Reasoning Agent ({strategy})",
-                        method="reasoning.stream",
-                        user_prompt=user_query[:500],
-                        response=full_response[:2000],
-                        metadata={
-                            "request_id": request_id,
-                            "model": interceptor_model,
-                            "strategy": strategy,
-                            "use_rag": bool(rag_context),
-                            "response_length": len(full_response),
-                            "source": "openai_compat"
-                        },
-                        duration_ms=duration_ms,
-                        status="success"
-                    )
-                except Exception as e:
-                    print(f"[A2A Event] Error logging A2A event: {e}", flush=True)
-
-            # Send final chunk with finish_reason
-            final_chunk = ChatCompletionChunk(
-                id=request_id,
-                created=created,
-                model=request.model,
-                choices=[ChatCompletionChunkChoice(
-                    index=0,
-                    delta=DeltaContent(),
-                    finish_reason="stop"
-                )]
-            )
-            yield f"data: {final_chunk.model_dump_json()}\n\n"
-            yield "data: [DONE]\n\n"
-            return
+                    if msg_type == 'chunk':
+                        yield make_chunk(content=msg_data)
+                    elif msg_type == 'done':
+                        break
+                    elif msg_type == 'error':
+                        yield make_chunk(content=f'\n\n⚠️ Error: {msg_data}')
+                        break
+                except queue.Empty:
+                    yield make_chunk(content='\n\n⚠️ Response timeout.')
+                    break
 
         except Exception as e:
-            log_a2a_event("reasoning.dispatch", "error", str(e))
-            traceback.print_exc()
-            sys.stdout.flush()
+            logger.error(f'Interceptor streaming failed: {e}')
+            yield make_chunk(content=f'\n\n⚠️ Interceptor error: {str(e)}')
 
-            # If we already started streaming, we must properly terminate
-            if interceptor_started:
-                error_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=f"\n\n❌ Error: {str(e)}"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {error_chunk.model_dump_json()}\n\n"
-                final_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(),
-                        finish_reason="stop"
-                    )]
-                )
-                yield f"data: {final_chunk.model_dump_json()}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-            # Fall through to ensemble fallback only if not started
-
-    # FALLBACK 1: Use reasoning ensemble (non-streaming internally)
-    if _reasoning_ensemble:
-        ensemble_started = False
+    # Fall back to reasoning ensemble
+    elif _reasoning_ensemble and is_reasoning:
         try:
-            log_a2a_event("reasoning.fallback", "started", "Using RAGReasoningEnsemble")
+            log_a2a_event('openai.streaming', 'started',
+                          f'Using RAGReasoningEnsemble with strategy: {strategy}')
 
-            # Send initial role chunk only if RAG sources weren't displayed
-            if not initial_sent:
-                initial_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(role="assistant"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {initial_chunk.model_dump_json()}\n\n"
-            else:
-                # Add separator
-                separator = "\n\n🤖 **Agent Response**\n\n"
-                sep_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=separator),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {sep_chunk.model_dump_json()}\n\n"
-
-            ensemble_started = True
-            start_time = time.time()
-
-            # Run the ensemble (non-streaming internally, we'll stream the result)
             result = await _reasoning_ensemble.run(
-                query=augmented_query,
+                query=full_prompt,
                 strategies=[strategy],
-                use_rag=False,  # We already did RAG above
-                collection="General",
-                config=None
+                use_rag=False,  # RAG already applied above
             )
 
-            # Get the response text and clean it
-            response_text = result.winner.get("response", "No response generated")
-            response_text = strip_ansi_codes(response_text)
+            response_text = result.winner.get('response', '')
+            clean_text = strip_ansi_codes(response_text)
 
-            duration_ms = (time.time() - start_time) * 1000
-            log_a2a_event(
-                "reasoning.fallback",
-                "success",
-                f"Ensemble complete",
-                duration_ms=f"{duration_ms:.0f}",
-                response_length=len(response_text)
-            )
-
-            # Log to Oracle DB
-            if _event_logger:
-                try:
-                    # Log API event
-                    _event_logger.log_api_event(
-                        endpoint="/v1/chat/completions",
-                        method="POST",
-                        request_data={
-                            "model": request.model,
-                            "strategy": strategy,
-                            "stream": True,
-                            "query_preview": user_query[:100]
-                        },
-                        response_data={
-                            "request_id": request_id,
-                            "response_length": len(response_text),
-                            "status": "success",
-                            "backend": "reasoning_ensemble"
-                        },
-                        status_code=200,
-                        duration_ms=duration_ms
-                    )
-                    # Log reasoning event
-                    _event_logger.log_reasoning_event(
-                        query_text=user_query,
-                        strategies_requested=[strategy],
-                        winner_strategy=strategy,
-                        winner_response=response_text[:2000],
-                        vote_count=1,
-                        all_responses=[{"strategy": strategy, "response": response_text[:500]}],
-                        rag_enabled=bool(rag_context),
-                        collection_used="unified_rag" if rag_context else None,
-                        chunks_retrieved=0,
-                        total_duration_ms=duration_ms,
-                        status="success"
-                    )
-                except Exception as e:
-                    print(f"[EventLogger] Error logging to Oracle DB: {e}", flush=True)
-
-            # Stream the response in chunks
-            chunk_size = 50  # Characters per chunk (larger for smoother display)
-            for i in range(0, len(response_text), chunk_size):
-                text_chunk = response_text[i:i + chunk_size]
-                content_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=text_chunk),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {content_chunk.model_dump_json()}\n\n"
-                await asyncio.sleep(0.005)  # Small delay for smoother streaming
-
-            # Send final chunk with finish_reason
-            final_chunk = ChatCompletionChunk(
-                id=request_id,
-                created=created,
-                model=request.model,
-                choices=[ChatCompletionChunkChoice(
-                    index=0,
-                    delta=DeltaContent(),
-                    finish_reason="stop"
-                )]
-            )
-            yield f"data: {final_chunk.model_dump_json()}\n\n"
-            yield "data: [DONE]\n\n"
-            return
-
-        except Exception as e:
-            log_a2a_event("reasoning.fallback", "error", str(e))
-            traceback.print_exc()
-            sys.stdout.flush()
-
-            # If we already started streaming, we must properly terminate
-            if ensemble_started:
-                error_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=f"\n\n❌ Error: {str(e)}"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {error_chunk.model_dump_json()}\n\n"
-                final_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(),
-                        finish_reason="stop"
-                    )]
-                )
-                yield f"data: {final_chunk.model_dump_json()}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-            # Fall through to local agent only if not started
-
-    # FALLBACK 2: Use local agent
-    if _local_agent:
-        local_started = False
-        try:
-            log_a2a_event("reasoning.local", "started", "Using LocalRAGAgent")
-
-            # Send initial role chunk only if RAG sources weren't displayed
-            if not initial_sent:
-                initial_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(role="assistant"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {initial_chunk.model_dump_json()}\n\n"
-            else:
-                # Add separator
-                separator = "\n\n🤖 **Agent Response**\n\n"
-                sep_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=separator),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {sep_chunk.model_dump_json()}\n\n"
-
-            local_started = True
-            start_time = time.time()
-
-            # Process query with local agent
-            response = _local_agent.process_query(augmented_query)
-
-            # Handle different response types
-            if isinstance(response, dict):
-                response_text = response.get("answer", str(response))
-            else:
-                response_text = str(response)
-
-            # Clean ANSI codes
-            response_text = strip_ansi_codes(response_text)
-
-            duration_ms = (time.time() - start_time) * 1000
-            log_a2a_event(
-                "reasoning.local",
-                "success",
-                f"Local agent complete",
-                duration_ms=f"{duration_ms:.0f}",
-                response_length=len(response_text)
-            )
-
-            # Log to Oracle DB
-            if _event_logger:
-                try:
-                    # Log API event
-                    _event_logger.log_api_event(
-                        endpoint="/v1/chat/completions",
-                        method="POST",
-                        request_data={
-                            "model": request.model,
-                            "strategy": strategy,
-                            "stream": True,
-                            "query_preview": user_query[:100]
-                        },
-                        response_data={
-                            "request_id": request_id,
-                            "response_length": len(response_text),
-                            "status": "success",
-                            "backend": "local_agent"
-                        },
-                        status_code=200,
-                        duration_ms=duration_ms
-                    )
-                    # Log model event
-                    _event_logger.log_model_event(
-                        model_name=request.model,
-                        model_type="local_agent",
-                        user_prompt=user_query,
-                        response=response_text[:2000],
-                        collection_used="unified_rag" if rag_context else None,
-                        use_cot=strategy in ["cot", "tot", "react"],
-                        duration_ms=duration_ms
-                    )
-                except Exception as e:
-                    print(f"[EventLogger] Error logging to Oracle DB: {e}", flush=True)
-
-            # Stream the response
+            # Stream in small chunks for better UX
             chunk_size = 50
-            for i in range(0, len(response_text), chunk_size):
-                text_chunk = response_text[i:i + chunk_size]
-                content_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=text_chunk),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {content_chunk.model_dump_json()}\n\n"
-                await asyncio.sleep(0.005)
-
-            # Final chunk
-            final_chunk = ChatCompletionChunk(
-                id=request_id,
-                created=created,
-                model=request.model,
-                choices=[ChatCompletionChunkChoice(
-                    index=0,
-                    delta=DeltaContent(),
-                    finish_reason="stop"
-                )]
-            )
-            yield f"data: {final_chunk.model_dump_json()}\n\n"
-            yield "data: [DONE]\n\n"
-            return
+            for i in range(0, len(clean_text), chunk_size):
+                yield make_chunk(content=clean_text[i:i + chunk_size])
+                await asyncio.sleep(0.01)
 
         except Exception as e:
-            log_a2a_event("reasoning.local", "error", str(e))
+            logger.error(f'Ensemble streaming failed: {e}')
+            yield make_chunk(content=f'\n\n⚠️ Error: {str(e)}')
 
-            # If we already started streaming, we must properly terminate
-            if local_started:
-                error_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(content=f"\n\n❌ Error: {str(e)}"),
-                        finish_reason=None
-                    )]
-                )
-                yield f"data: {error_chunk.model_dump_json()}\n\n"
-                final_chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=created,
-                    model=request.model,
-                    choices=[ChatCompletionChunkChoice(
-                        index=0,
-                        delta=DeltaContent(),
-                        finish_reason="stop"
-                    )]
-                )
-                yield f"data: {final_chunk.model_dump_json()}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-
-    # No backend available
-    log_a2a_event("chat.completions", "error", "No reasoning backend available")
-
-    # Log error to Oracle DB
-    if _event_logger:
+    # Fall back to local agent
+    elif _local_agent:
         try:
-            total_duration_ms = (time.time() - start_time) * 1000
-            _event_logger.log_api_event(
-                endpoint="/v1/chat/completions",
-                method="POST",
-                request_data={
-                    "model": request.model,
-                    "strategy": strategy,
-                    "stream": True
-                },
-                response_data={"error": "No reasoning backend available"},
-                status_code=500,
-                duration_ms=total_duration_ms
+            log_a2a_event('openai.streaming', 'started', 'Using LocalRAGAgent fallback')
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: _local_agent.process_query(full_prompt)
             )
+
+            response_text = result.get('answer', str(result))
+            clean_text = strip_ansi_codes(response_text)
+
+            chunk_size = 50
+            for i in range(0, len(clean_text), chunk_size):
+                yield make_chunk(content=clean_text[i:i + chunk_size])
+                await asyncio.sleep(0.01)
+
         except Exception as e:
-            print(f"[EventLogger] Error logging error to Oracle DB: {e}", flush=True)
+            logger.error(f'Local agent streaming failed: {e}')
+            yield make_chunk(content=f'\n\n⚠️ Error: {str(e)}')
+    else:
+        yield make_chunk(content='⚠️ No reasoning backend available. Please check server configuration.')
 
-    # Send initial role chunk if not already sent
-    if not initial_sent:
-        initial_chunk = ChatCompletionChunk(
-            id=request_id,
-            created=created,
-            model=request.model,
-            choices=[ChatCompletionChunkChoice(
-                index=0,
-                delta=DeltaContent(role="assistant"),
-                finish_reason=None
-            )]
-        )
-        yield f"data: {initial_chunk.model_dump_json()}\n\n"
-
-    error_chunk = ChatCompletionChunk(
-        id=request_id,
-        created=created,
-        model=request.model,
-        choices=[ChatCompletionChunkChoice(
-            index=0,
-            delta=DeltaContent(content="❌ Error: No reasoning backend available"),
-            finish_reason=None
-        )]
-    )
-    yield f"data: {error_chunk.model_dump_json()}\n\n"
-
-    final_chunk = ChatCompletionChunk(
-        id=request_id,
-        created=created,
-        model=request.model,
-        choices=[ChatCompletionChunkChoice(
-            index=0,
-            delta=DeltaContent(),
-            finish_reason="stop"
-        )]
-    )
-    yield f"data: {final_chunk.model_dump_json()}\n\n"
-    yield "data: [DONE]\n\n"
+    # Send finish chunk
+    yield make_chunk(finish_reason='stop')
+    yield 'data: [DONE]\n\n'
 
 
 async def generate_non_streaming_response(
     request: ChatCompletionRequest,
     model_config: Dict[str, Any],
-    rag_context: str = ""
+    rag_context: str
 ) -> ChatCompletionResponse:
     """
     Generate non-streaming chat completion response.
     """
-    request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    completion_id = f'chatcmpl-{uuid.uuid4().hex[:12]}'
     created = int(time.time())
-    start_time = time.time()
 
-    # Get the user's query
-    user_query = ""
-    for msg in reversed(request.messages):
-        if msg.role.value == "user" and msg.content:
-            user_query = msg.content
+    strategy = model_config.get('strategy', 'standard')
+    is_reasoning = model_config.get('is_reasoning', False)
+    base_model = _config.get('model_name', 'qwen3.5:9b')
+
+    # Extract last user message
+    messages = request.messages
+    last_message = ''
+    for msg in reversed(messages):
+        if msg.role == 'user' or (hasattr(msg.role, 'value') and msg.role.value == 'user'):
+            last_message = extract_text_from_content(msg.content)
             break
 
-    if not user_query:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": {"message": "No user message found", "type": "invalid_request_error"}}
-        )
-
-    # Build augmented query
-    augmented_query = user_query
+    full_prompt = last_message
     if rag_context:
-        augmented_query = f"{rag_context}\n\nUser Question: {user_query}"
+        full_prompt = f'{rag_context}\n\nUser Question: {last_message}'
 
-    strategy = model_config["strategy"]
-    response_text = ""
-    backend_used = "none"
+    response_text = ''
 
-    # Try reasoning ensemble
-    if _reasoning_ensemble:
+    # Use ReasoningInterceptor when available
+    if _interceptor and INTERCEPTOR_AVAILABLE and is_reasoning:
+        try:
+            model_with_strategy = f'{base_model}+{strategy}'
+            result = _interceptor.generate(
+                model=model_with_strategy,
+                prompt=full_prompt,
+                stream=False
+            )
+            response_text = strip_ansi_codes(result.get('response', ''))
+        except Exception as e:
+            logger.error(f'Interceptor non-streaming error: {e}')
+            response_text = f'Error: {str(e)}'
+
+    elif _reasoning_ensemble and is_reasoning:
         try:
             result = await _reasoning_ensemble.run(
-                query=augmented_query,
+                query=full_prompt,
                 strategies=[strategy],
                 use_rag=False,
-                collection="General",
-                config=None
             )
-            response_text = result.winner.get("response", "No response generated")
-            response_text = strip_ansi_codes(response_text)  # Remove ANSI color codes
-            backend_used = "reasoning_ensemble"
+            response_text = strip_ansi_codes(result.winner.get('response', ''))
         except Exception as e:
-            print(f"Reasoning ensemble error: {e}", flush=True)
+            logger.error(f'Ensemble non-streaming error: {e}')
+            response_text = f'Error: {str(e)}'
 
-    # Fallback to local agent
-    if not response_text and _local_agent:
+    elif _local_agent:
         try:
-            response = _local_agent.process_query(augmented_query)
-            if isinstance(response, dict):
-                response_text = response.get("answer", str(response))
-            else:
-                response_text = str(response)
-            response_text = strip_ansi_codes(response_text)  # Remove ANSI color codes
-            backend_used = "local_agent"
-        except Exception as e:
-            print(f"Local agent error: {e}", flush=True)
-
-    if not response_text:
-        response_text = "Error: No reasoning backend available"
-
-    duration_ms = (time.time() - start_time) * 1000
-
-    # Log to Oracle DB
-    if _event_logger:
-        try:
-            # Log API event
-            _event_logger.log_api_event(
-                endpoint="/v1/chat/completions",
-                method="POST",
-                request_data={
-                    "model": request.model,
-                    "strategy": strategy,
-                    "stream": False,
-                    "query_preview": user_query[:100]
-                },
-                response_data={
-                    "request_id": request_id,
-                    "response_length": len(response_text),
-                    "status": "success" if backend_used != "none" else "error",
-                    "backend": backend_used
-                },
-                status_code=200,
-                duration_ms=duration_ms
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: _local_agent.process_query(full_prompt)
             )
-            # Log model event
-            if backend_used != "none":
-                _event_logger.log_model_event(
-                    model_name=request.model,
-                    model_type=backend_used,
-                    user_prompt=user_query,
-                    response=response_text[:2000],
-                    collection_used="unified_rag" if rag_context else None,
-                    use_cot=strategy in ["cot", "tot", "react"],
-                    duration_ms=duration_ms
-                )
+            response_text = result.get('answer', str(result))
         except Exception as e:
-            print(f"[EventLogger] Error logging to Oracle DB: {e}", flush=True)
+            logger.error(f'Local agent non-streaming error: {e}')
+            response_text = f'Error: {str(e)}'
+    else:
+        response_text = 'No reasoning backend available. Please check server configuration.'
 
-    return ChatCompletionResponse(
-        id=request_id,
+    # Build response
+    response = ChatCompletionResponse(
+        id=completion_id,
+        object='chat.completion',
         created=created,
         model=request.model,
         choices=[
             ChatCompletionChoice(
                 index=0,
-                message=ChatMessage(role="assistant", content=response_text),
-                finish_reason="stop"
+                message=ChatMessage(role='assistant', content=response_text),
+                finish_reason='stop'
             )
         ],
         usage=UsageInfo(
-            prompt_tokens=len(augmented_query.split()),
+            prompt_tokens=len(full_prompt.split()),
             completion_tokens=len(response_text.split()),
-            total_tokens=len(augmented_query.split()) + len(response_text.split())
+            total_tokens=len(full_prompt.split()) + len(response_text.split())
         )
     )
 
+    return response
 
-def extract_text_from_content(content: Union[str, List[ContentPart], None]) -> str:
+
+def extract_text_from_content(content):
     """
     Extract text content from a message that may be string or multimodal array.
 
@@ -1427,22 +633,22 @@ def extract_text_from_content(content: Union[str, List[ContentPart], None]) -> s
     Returns the concatenated text content.
     """
     if content is None:
-        return ""
+        return ''
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         text_parts = []
         for part in content:
             if isinstance(part, dict):
-                if part.get("type") == "text" and part.get("text"):
-                    text_parts.append(part["text"])
-            elif hasattr(part, "type") and part.type == "text" and part.text:
+                if part.get('type') == 'text' and part.get('text'):
+                    text_parts.append(part['text'])
+            elif hasattr(part, 'type') and part.type == 'text' and part.text:
                 text_parts.append(part.text)
-        return "\n".join(text_parts)
+        return ' '.join(text_parts)
     return str(content)
 
 
-def extract_attachments_from_content(content: Union[str, List[ContentPart], None]) -> List[Dict[str, Any]]:
+def extract_attachments_from_content(content):
     """
     Extract non-text attachments (images, files, URLs) from multimodal content.
 
@@ -1451,34 +657,43 @@ def extract_attachments_from_content(content: Union[str, List[ContentPart], None
     attachments = []
     if not isinstance(content, list):
         return attachments
-
     for part in content:
-        part_dict = part.model_dump() if hasattr(part, "model_dump") else (part if isinstance(part, dict) else {})
-        part_type = part_dict.get("type", "")
-
-        if part_type == "image_url":
-            image_info = part_dict.get("image_url", {})
-            attachments.append({
-                "type": "image",
-                "url": image_info.get("url"),
-                "detail": image_info.get("detail", "auto")
-            })
-        elif part_type == "file":
-            attachments.append({
-                "type": "file",
-                "id": part_dict.get("id"),
-                "name": part_dict.get("name"),
-                "data": part_dict.get("data"),
-                "url": part_dict.get("url")
-            })
-        elif part_type not in ["text", ""]:
-            # Capture any other attachment types
-            attachments.append({"type": part_type, **part_dict})
-
+        if isinstance(part, dict):
+            part_type = part.get('type', '')
+            if part_type == 'image_url':
+                attachments.append({
+                    'type': 'image',
+                    'url': part.get('image_url', {}).get('url', '')
+                })
+            elif part_type == 'file':
+                attachments.append({
+                    'type': 'file',
+                    'name': part.get('name', ''),
+                    'url': part.get('url', ''),
+                    'data': part.get('data', '')
+                })
+            elif part_type not in ('text',):
+                attachments.append({
+                    'type': part_type,
+                    'data': part
+                })
+        elif hasattr(part, 'type'):
+            if part.type == 'image_url' and part.image_url:
+                attachments.append({
+                    'type': 'image',
+                    'url': part.image_url.get('url', '') if isinstance(part.image_url, dict) else ''
+                })
+            elif part.type == 'file':
+                attachments.append({
+                    'type': 'file',
+                    'name': getattr(part, 'name', ''),
+                    'url': getattr(part, 'url', ''),
+                    'data': getattr(part, 'data', '')
+                })
     return attachments
 
 
-def extract_openwebui_sources(message_content: str) -> List[Dict[str, Any]]:
+def extract_openwebui_sources(message_content):
     """
     Extract source content from Open WebUI's preprocessed message format.
 
@@ -1490,39 +705,35 @@ def extract_openwebui_sources(message_content: str) -> List[Dict[str, Any]]:
     Returns list of source dicts with id, title, url, and content.
     """
     sources = []
-
-    # Pattern to match <source> tags with their attributes and content
-    # Open WebUI format: <source id="X" ...attributes...>content</source>
-    pattern = re.compile(
-        r'<source\s+([^>]*)>(.*?)</source>',
-        re.DOTALL | re.IGNORECASE
-    )
-
+    pattern = re.compile(r'<source\s+([^>]*)>(.*?)</source>', re.DOTALL | re.IGNORECASE)
     for match in pattern.finditer(message_content):
         attrs_str = match.group(1)
         content = match.group(2).strip()
-
-        # Parse attributes
         id_match = re.search(r'id="([^"]*)"', attrs_str)
         title_match = re.search(r'title="([^"]*)"', attrs_str)
         url_match = re.search(r'url="([^"]*)"', attrs_str)
         name_match = re.search(r'name="([^"]*)"', attrs_str)
 
-        source_info = {
-            "id": id_match.group(1) if id_match else f"source_{len(sources)}",
-            "title": title_match.group(1) if title_match else (name_match.group(1) if name_match else ""),
-            "url": url_match.group(1) if url_match else "",
-            "content": content
-        }
+        if title_match:
+            title = title_match.group(1)
+        elif name_match:
+            title = name_match.group(1)
+        else:
+            title = ''
 
-        # Only add if there's actual content
+        source_info = {
+            'id': id_match.group(1) if id_match else '',
+            'title': title,
+            'url': url_match.group(1) if url_match else '',
+            'content': content
+        }
+        # Only add sources with substantial content
         if content and len(content) > 50:
             sources.append(source_info)
-
     return sources
 
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+def chunk_text(text, chunk_size=1000, overlap=200):
     """
     Split text into overlapping chunks for vector storage.
 
@@ -1536,29 +747,21 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[st
     """
     if len(text) <= chunk_size:
         return [text]
-
     chunks = []
     start = 0
-
     while start < len(text):
         end = start + chunk_size
-
-        # Try to break at a sentence boundary
+        # Try to break at sentence boundaries
         if end < len(text):
-            # Look for sentence-ending punctuation
-            for punct in ['. ', '.\n', '! ', '!\n', '? ', '?\n', '\n\n']:
+            for punct in ('. ', '.\n', '! ', '!\n', '? ', '?\n', '\n\n'):
                 break_point = text.rfind(punct, start + chunk_size // 2, end)
                 if break_point != -1:
                     end = break_point + len(punct)
                     break
-
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
-
-        # Move start with overlap
         start = end - overlap if end < len(text) else len(text)
-
     return chunks
 
 
@@ -1566,7 +769,7 @@ async def execute_via_a2a(
     query: str,
     strategy: str,
     use_rag: bool = False,
-    collection: str = "General",
+    collection: str = 'General',
     request_id: str = None
 ) -> Dict[str, Any]:
     """
@@ -1588,55 +791,43 @@ async def execute_via_a2a(
         Dict with response and metadata
     """
     if not _a2a_handler:
-        log_a2a_event("a2a.execute", "warning", "A2A handler not available, falling back to direct execution")
-        return {"error": "A2A handler not available"}
+        return {
+            'error': 'A2A handler not available',
+            'response': ''
+        }
 
     try:
-        # Import A2A models
-        from .a2a_models import A2ARequest
+        from a2a_models import A2ARequest
+        if not request_id:
+            request_id = str(uuid.uuid4())
 
-        # Create A2A request for reasoning execution
         a2a_request = A2ARequest(
-            method="reasoning.execute",
+            jsonrpc='2.0',
+            method='reasoning.strategy',
             params={
-                "query": query,
-                "strategy": strategy,
-                "use_rag": use_rag,
-                "collection": collection
+                'query': query,
+                'strategy': strategy,
+                'use_rag': use_rag,
+                'collection': collection
             },
-            id=request_id or f"openai-{uuid.uuid4().hex[:8]}"
+            id=request_id
         )
 
-        log_a2a_event(
-            "a2a.reasoning",
-            "started",
-            f"Routing through A2A protocol",
-            strategy=strategy,
-            request_id=a2a_request.id
-        )
-
-        # Execute via A2A handler
-        response = await _a2a_handler.handle_request(a2a_request)
-
-        if response.error:
-            log_a2a_event("a2a.reasoning", "error", str(response.error))
-            return {"error": str(response.error)}
-
-        log_a2a_event(
-            "a2a.reasoning",
-            "success",
-            f"A2A response received",
-            request_id=a2a_request.id
-        )
-
-        return response.result if response.result else {}
+        result = await _a2a_handler.handle_request(a2a_request)
+        return result.result if hasattr(result, 'result') and result.result else {
+            'error': result.error if hasattr(result, 'error') else 'Unknown error',
+            'response': ''
+        }
 
     except Exception as e:
-        log_a2a_event("a2a.reasoning", "error", f"A2A execution failed: {e}")
-        return {"error": str(e)}
+        logger.error(f'A2A execution error: {e}')
+        return {
+            'error': str(e),
+            'response': ''
+        }
 
 
-async def persist_openwebui_context_to_rag(message_content: str) -> Dict[str, Any]:
+async def persist_openwebui_context_to_rag(message_content):
     """
     Extract Open WebUI embedded sources and persist them to Oracle AI Database.
 
@@ -1650,107 +841,85 @@ async def persist_openwebui_context_to_rag(message_content: str) -> Dict[str, An
     Returns:
         Dict with status, sources_found, chunks_stored, and any errors
     """
-    result = {
-        "sources_found": 0,
-        "chunks_stored": 0,
-        "sources": [],
-        "errors": []
-    }
-
     if not _vector_store:
-        result["errors"].append("Vector store not initialized")
-        return result
+        return {
+            'status': 'skipped',
+            'reason': 'No vector store available',
+            'sources_found': 0,
+            'chunks_stored': 0
+        }
 
-    # Check if this looks like Open WebUI preprocessed content
-    if "<source" not in message_content:
-        return result
-
-    # Extract sources from the message
     sources = extract_openwebui_sources(message_content)
-    result["sources_found"] = len(sources)
-
     if not sources:
-        return result
+        return {
+            'status': 'no_sources',
+            'sources_found': 0,
+            'chunks_stored': 0
+        }
 
-    log_a2a_event(
-        "openwebui.context",
-        "detected",
-        f"Found {len(sources)} embedded sources",
-        sources=len(sources)
-    )
+    total_chunks_stored = 0
+    errors = []
 
     for source in sources:
         try:
-            source_url = source.get("url", "")
-            source_title = source.get("title", "Unknown")
-            source_id = source.get("id", "")
-            content = source.get("content", "")
+            content = source.get('content', '')
+            title = source.get('title', '')
+            url = source.get('url', '')
 
-            # Generate a unique ID for deduplication
-            import hashlib
-            content_hash = hashlib.md5(content[:1000].encode()).hexdigest()[:8]
-            unique_source_id = f"openwebui_{source_id}_{content_hash}"
+            if not content:
+                continue
 
             # Chunk the content
-            text_chunks = chunk_text(content, chunk_size=800, overlap=100)
+            chunks = chunk_text(content)
 
             # Prepare chunks for storage
-            chunks = []
-            for i, chunk_text_item in enumerate(text_chunks):
-                chunks.append({
-                    "text": chunk_text_item,
-                    "metadata": {
-                        "source": source_url or f"openwebui_source_{source_id}",
-                        "title": source_title,
-                        "chunk_id": i,
-                        "total_chunks": len(text_chunks),
-                        "source_type": "openwebui_attachment",
-                        "ingestion_time": datetime.now().isoformat()
+            web_chunks = []
+            for i, chunk_text_content in enumerate(chunks):
+                web_chunks.append({
+                    'text': chunk_text_content,
+                    'metadata': {
+                        'source': url or f'openwebui_{source.get("id", "")}',
+                        'title': title,
+                        'type': 'openwebui_source',
+                        'chunk_id': i,
+                        'total_chunks': len(chunks)
                     }
                 })
 
-            # Persist to Oracle AI Database
-            if chunks:
-                _vector_store.add_web_chunks(chunks, unique_source_id)
+            # Store in WEBCOLLECTION
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, lambda c=web_chunks: _vector_store.add_web_chunks(c)
+            )
+            total_chunks_stored += len(web_chunks)
 
-                log_a2a_event(
-                    "openwebui.persist",
-                    "success",
-                    f"Stored source: {source_title[:50]}",
-                    chunks=len(chunks),
-                    url=source_url[:60] if source_url else "N/A"
+            log_a2a_event('openwebui.persist', 'success',
+                          f'Stored {len(web_chunks)} chunks from: {title or url}')
+
+            # Log to event logger if available
+            if _event_logger:
+                _event_logger.log_document_event(
+                    document_type='openwebui_source',
+                    document_id=source.get('id', str(uuid.uuid4())),
+                    source=url,
+                    chunks_processed=len(web_chunks),
+                    status='success'
                 )
 
-                result["chunks_stored"] += len(chunks)
-                result["sources"].append({
-                    "id": source_id,
-                    "title": source_title,
-                    "url": source_url,
-                    "chunks": len(chunks)
-                })
-
-                # Log to Oracle DB event logger
-                if _event_logger:
-                    try:
-                        _event_logger.log_document_event(
-                            document_type="openwebui_webpage",
-                            document_id=unique_source_id,
-                            source=source_url or f"openwebui_source_{source_id}",
-                            chunks_processed=len(chunks),
-                            status="success"
-                        )
-                    except Exception as e:
-                        print(f"[EventLogger] Error logging ingest event: {e}", flush=True)
-
         except Exception as e:
-            error_msg = f"Failed to persist source {source.get('id', 'unknown')}: {str(e)}"
-            result["errors"].append(error_msg)
-            log_a2a_event("openwebui.persist", "error", error_msg)
+            error_msg = f'Failed to persist source {source.get("id", "unknown")}: {e}'
+            logger.error(error_msg)
+            errors.append(error_msg)
 
-    return result
+    return {
+        'status': 'success' if not errors else 'partial',
+        'sources_found': len(sources),
+        'chunks_stored': total_chunks_stored,
+        'errors': errors
+    }
 
 
-async def process_openwebui_url_uploads(request_files: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def process_openwebui_url_uploads(request_files):
     """
     Process URL uploads from Open WebUI's "Upload Link" functionality.
 
@@ -1767,327 +936,233 @@ async def process_openwebui_url_uploads(request_files: List[Dict[str, Any]]) -> 
     Returns:
         Dict with stats: {"urls_processed": int, "chunks_stored": int, "errors": []}
     """
-    result = {
-        "urls_processed": 0,
-        "chunks_stored": 0,
-        "errors": [],
-        "sources": []
-    }
+    if not request_files or not _vector_store:
+        return {
+            'urls_processed': 0,
+            'chunks_stored': 0,
+            'errors': []
+        }
 
-    if not request_files:
-        return result
-
-    if not _vector_store:
-        result["errors"].append("Vector store not initialized")
-        return result
-
-    if not WebProcessor:
-        result["errors"].append("WebProcessor not available")
-        return result
-
-    processor = WebProcessor(chunk_size=800)
+    urls_processed = 0
+    chunks_stored = 0
+    errors = []
+    web_processor = WebProcessor(chunk_size=500)
 
     for file_info in request_files:
         try:
-            # Check if this is a URL upload
-            file_url = file_info.get("url")
-            file_type = file_info.get("type", "")
-            file_name = file_info.get("name") or file_info.get("filename", "")
+            # Check if this is a URL file
+            url = None
+            if isinstance(file_info, dict):
+                url = file_info.get('url', '')
+                if not url and file_info.get('name', '').startswith('http'):
+                    url = file_info['name']
+            elif hasattr(file_info, 'url') and file_info.url:
+                url = file_info.url
+            elif hasattr(file_info, 'name') and file_info.name and is_url(file_info.name):
+                url = file_info.name
 
-            # Skip non-URL files
-            if not file_url:
+            if not url or not is_url(url):
                 continue
 
-            # Validate it's actually a URL
-            if not is_url(file_url):
-                log_a2a_event(
-                    "openwebui.url_upload",
-                    "skipped",
-                    f"Not a valid URL: {file_url}"
-                )
-                continue
+            log_a2a_event('openwebui.url_upload', 'started', f'Processing URL: {url}')
 
-            log_a2a_event(
-                "openwebui.url_upload",
-                "processing",
-                f"Fetching URL: {file_url}",
-                source="Upload Link"
+            # Process URL with WebProcessor
+            loop = asyncio.get_event_loop()
+            chunks = await loop.run_in_executor(
+                None, lambda u=url: web_processor.process_url(u)
             )
 
-            # Fetch and process the URL
-            try:
-                chunks = processor.process_url(file_url)
-            except Exception as fetch_error:
-                error_msg = f"Failed to fetch URL {file_url}: {str(fetch_error)}"
-                result["errors"].append(error_msg)
-                log_a2a_event("openwebui.url_upload", "error", error_msg)
-                continue
+            if chunks:
+                # Prepare for storage
+                web_chunks = []
+                for chunk in chunks:
+                    chunk['metadata']['source'] = f'openwebui_url:{url}'
+                    web_chunks.append(chunk)
 
-            if not chunks:
-                log_a2a_event(
-                    "openwebui.url_upload",
-                    "warning",
-                    f"No content extracted from {file_url}"
+                # Store in WEBCOLLECTION
+                await loop.run_in_executor(
+                    None, lambda c=web_chunks: _vector_store.add_web_chunks(c)
                 )
-                continue
 
-            # Add openwebui_url source marker to metadata
-            for chunk in chunks:
-                chunk["metadata"]["source_type"] = "openwebui_url"
-                chunk["metadata"]["upload_method"] = "Upload Link"
-                chunk["metadata"]["original_filename"] = file_name
+                urls_processed += 1
+                chunks_stored += len(web_chunks)
 
-            # Generate unique source ID
-            source_id = f"openwebui_url_{uuid.uuid4().hex[:8]}"
+                log_a2a_event('openwebui.url_upload', 'success',
+                              f'Stored {len(web_chunks)} chunks from {url}')
 
-            # Persist to WEBCOLLECTION
-            _vector_store.add_web_chunks(chunks, source_id)
-
-            result["urls_processed"] += 1
-            result["chunks_stored"] += len(chunks)
-
-            # Extract title from first chunk metadata
-            title = chunks[0]["metadata"].get("title", file_url) if chunks else file_url
-            result["sources"].append({
-                "url": file_url,
-                "title": title,
-                "chunks": len(chunks)
-            })
-
-            log_a2a_event(
-                "openwebui.url_upload",
-                "success",
-                f"Stored {len(chunks)} chunks from {file_url}",
-                collection="WEBCOLLECTION",
-                source_id=source_id
-            )
-
-            # Log to Oracle event logger
-            if _event_logger:
-                try:
+                # Log event
+                if _event_logger:
                     _event_logger.log_document_event(
-                        document_type="openwebui_url",
-                        document_id=source_id,
-                        source=file_url,
-                        chunks_processed=len(chunks),
-                        status="success"
+                        document_type='openwebui_url',
+                        document_id=url,
+                        source=url,
+                        chunks_processed=len(web_chunks),
+                        status='success'
                     )
-                except Exception as e:
-                    print(f"[EventLogger] Error logging URL upload event: {e}", flush=True)
 
         except Exception as e:
-            error_msg = f"Error processing URL upload: {str(e)}"
-            result["errors"].append(error_msg)
-            log_a2a_event("openwebui.url_upload", "error", error_msg)
+            error_msg = f'Failed to process URL {url}: {e}'
+            logger.error(error_msg)
+            errors.append(error_msg)
 
-    return result
+    return {
+        'urls_processed': urls_processed,
+        'chunks_stored': chunks_stored,
+        'errors': errors
+    }
 
 
-@router.post("/chat/completions")
+# ============================================================
+# Route Handlers
+# ============================================================
+
+@router.get('/models', response_model=ModelList)
+async def list_models():
+    """List all available models."""
+    return get_model_list()
+
+
+@router.get('/models/{model_id}')
+async def get_model(model_id: str):
+    """Get information about a specific model."""
+    model_config = get_model_config(model_id)
+    if not model_config:
+        raise HTTPException(status_code=404, detail=f'Model {model_id} not found')
+    return ModelInfo(
+        id=model_id,
+        object='model',
+        created=int(time.time()),
+        owned_by='agentic-rag',
+        name=model_config.get('name', model_id),
+        description=model_config.get('description', '')
+    )
+
+
+@router.post('/chat/completions')
 async def create_chat_completion(request: ChatCompletionRequest):
     """
-    Create a chat completion.
+    Create a chat completion (OpenAI-compatible).
 
-    OpenAI-compatible endpoint that processes chat messages using
-    our reasoning strategies and optionally RAG context.
-
-    The model parameter determines which reasoning strategy to use:
-    - "cot", "cot-rag": Chain of Thought
-    - "tot", "tot-rag": Tree of Thoughts
-    - "react", "react-rag": ReAct
-    - etc.
-
-    Models with "-rag" suffix will perform unified RAG search across
-    all collections before reasoning.
-
-    Supports @file and @@file references in messages:
-    - @filename.ext → inject file content as temporary context
-    - @@filename.ext → add file to RAG storage and inject context
-
-    Also handles Open WebUI attachments:
-    - files array in request body
-    - Multimodal content arrays with images/files
-    - Upload Link URLs (automatically persisted to WEBCOLLECTION)
+    This is the main endpoint consumed by Open WebUI and other
+    OpenAI-compatible clients. It routes to the appropriate reasoning
+    strategy based on the model parameter.
     """
-    # Log parsed request for debugging attachment format
+    start_time = time.time()
+
     try:
-        # Log if there are files in the request
-        if request.files:
-            files_data = [f.model_dump() if hasattr(f, 'model_dump') else f for f in request.files]
-            print(f"📎 [Attachments] Request contains 'files' field: {json.dumps(files_data, indent=2)}", flush=True)
-
-        # Check for multimodal content in messages
-        for i, msg in enumerate(request.messages):
-            if isinstance(msg.content, list):
-                content_data = [c.model_dump() if hasattr(c, 'model_dump') else c for c in msg.content]
-                print(f"📎 [Attachments] Message {i} has multimodal content: {json.dumps(content_data, indent=2)}", flush=True)
-            if hasattr(msg, 'images') and msg.images:
-                print(f"📎 [Attachments] Message {i} has 'images' field: {msg.images}", flush=True)
-
-        # Log extra request fields
-        if request.chat_id:
-            print(f"📎 [Attachments] chat_id: {request.chat_id}", flush=True)
-        if request.session_id:
-            print(f"📎 [Attachments] session_id: {request.session_id}", flush=True)
-        if request.metadata:
-            print(f"📎 [Attachments] metadata: {json.dumps(request.metadata, indent=2)}", flush=True)
-
-        # Log full message content for first user message (truncated)
-        openwebui_persist_result = None
-        for msg in request.messages:
-            if msg.role.value == "user":
-                content_str = extract_text_from_content(msg.content)
-                if len(content_str) > 500:
-                    # This is likely an Open WebUI preprocessed message with embedded context
-                    print(f"📎 [OpenWebUI Context] Detected embedded context in message", flush=True)
-                    print(f"📎 [OpenWebUI Context] Full message length: {len(content_str)} chars", flush=True)
-                    # Check if it contains source tags (Open WebUI format)
-                    if "<source" in content_str:
-                        sources = re.findall(r'<source[^>]*id="([^"]*)"[^>]*>', content_str)
-                        print(f"📎 [OpenWebUI Context] Found {len(sources)} source references", flush=True)
-                        # Persist embedded sources to Oracle AI Database for RAG
-                        try:
-                            openwebui_persist_result = await persist_openwebui_context_to_rag(content_str)
-                            if openwebui_persist_result["chunks_stored"] > 0:
-                                print(f"📎 [OpenWebUI Context] ✅ Persisted {openwebui_persist_result['chunks_stored']} chunks to Oracle AI Database", flush=True)
-                        except Exception as e:
-                            print(f"📎 [OpenWebUI Context] ⚠️ Failed to persist sources: {e}", flush=True)
-                    # Check if it contains the user's original query
-                    if "User Query:" in content_str or "user query" in content_str.lower():
-                        query_match = re.search(r'User Query[:\s]+(.+?)(?:\n|$)', content_str, re.IGNORECASE)
-                        if query_match:
-                            print(f"📎 [OpenWebUI Context] Original user query: {query_match.group(1)[:100]}", flush=True)
+        # 1. Extract last user message
+        last_user_message = ''
+        for msg in reversed(request.messages):
+            if msg.role == 'user' or (hasattr(msg.role, 'value') and msg.role.value == 'user'):
+                last_user_message = extract_text_from_content(msg.content)
                 break
 
-    except Exception as e:
-        print(f"⚠️ [Attachments] Failed to log request: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
+        if not last_user_message:
+            raise HTTPException(status_code=400, detail='No user message found in request')
 
-    # Validate model
-    model_config = get_model_config(request.model)
-    if not model_config:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": {
-                    "message": f"Model '{request.model}' not found. Available models: {list(REASONING_MODELS.keys())}",
-                    "type": "invalid_request_error",
-                    "code": "model_not_found"
-                }
+        log_a2a_event('chat.completions', 'started',
+                      f'Model: {request.model}, Query: {last_user_message[:100]}...')
+
+        # 2. Determine model/strategy from request.model
+        model_config = get_model_config(request.model)
+        if not model_config:
+            # Default to standard model config
+            model_config = {
+                'strategy': 'standard',
+                'is_reasoning': False,
+                'use_rag': False,
+                'name': request.model,
+                'description': 'Standard model'
             }
-        )
 
-    # Get user's query for processing (handles both string and multimodal content)
-    user_query = ""
-    user_message_idx = -1
-    message_attachments = []
+        # 3. Process Open WebUI embedded sources (persist to RAG)
+        for msg in request.messages:
+            if msg.role == 'user' or (hasattr(msg.role, 'value') and msg.role.value == 'user'):
+                msg_content = extract_text_from_content(msg.content)
+                if '<source' in msg_content:
+                    await persist_openwebui_context_to_rag(msg_content)
 
-    for idx, msg in enumerate(reversed(request.messages)):
-        if msg.role.value == "user" and msg.content:
-            # Extract text from potentially multimodal content
-            user_query = extract_text_from_content(msg.content)
-            user_message_idx = len(request.messages) - 1 - idx
-
-            # Extract any attachments from multimodal content
-            message_attachments = extract_attachments_from_content(msg.content)
-            if message_attachments:
-                print(f"📎 [Attachments] Extracted from message content: {message_attachments}", flush=True)
-            break
-
-    # Also check request-level files (Open WebUI format)
-    request_files = []
-    if request.files:
-        request_files = [f.model_dump() for f in request.files]
-        print(f"📎 [Attachments] Request-level files: {json.dumps(request_files, indent=2)}", flush=True)
-
-        # Process URL uploads from "Upload Link" functionality
-        # This persists URL content to WEBCOLLECTION for RAG
-        try:
-            url_upload_result = await process_openwebui_url_uploads(request_files)
-            if url_upload_result["urls_processed"] > 0:
-                print(f"🔗 [Upload Link] ✅ Processed {url_upload_result['urls_processed']} URLs, stored {url_upload_result['chunks_stored']} chunks to WEBCOLLECTION", flush=True)
-                for source in url_upload_result.get("sources", []):
-                    print(f"   └─ {source['title'][:50]}... ({source['chunks']} chunks)", flush=True)
-            if url_upload_result["errors"]:
-                for error in url_upload_result["errors"]:
-                    print(f"🔗 [Upload Link] ⚠️ {error}", flush=True)
-        except Exception as e:
-            print(f"🔗 [Upload Link] ⚠️ Failed to process URL uploads: {e}", flush=True)
-
-    # Process file references (@file and @@file patterns)
-    file_context = ""
-    file_display_info = []
-    cleaned_query = user_query
-
-    if user_query and _file_handler:
-        cleaned_query, file_context, file_display_info = await process_file_references(user_query)
-
-        # Update the message with cleaned query (file refs removed)
-        if cleaned_query != user_query and user_message_idx >= 0:
-            # Create modified messages list
-            messages_copy = list(request.messages)
-            original_msg = messages_copy[user_message_idx]
-            messages_copy[user_message_idx] = ChatMessage(
-                role=original_msg.role,
-                content=cleaned_query
+        # 4. Process file references if _file_handler available
+        file_display_info = None
+        if _file_handler:
+            cleaned_message, file_context, file_display_info = await process_file_references(
+                last_user_message
             )
-            request = ChatCompletionRequest(
-                model=request.model,
-                messages=messages_copy,
-                stream=request.stream,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-            )
-            user_query = cleaned_query
+            if file_context:
+                last_user_message = cleaned_message
+                # Prepend file context to the message
+                last_user_message = f'{file_context}\n\n{last_user_message}'
 
-    # Get RAG context if enabled
-    rag_context = ""
-    rag_results = []
-    if model_config["rag"]:
-        if user_query:
-            rag_results = await unified_rag_search(user_query, top_k=5)
+        # 5. Process URL uploads if present
+        if request.files:
+            await process_openwebui_url_uploads(request.files)
+
+        # 6. Do RAG search if model config says use_rag
+        rag_context = ''
+        rag_results = None
+        use_rag = model_config.get('use_rag', False)
+
+        if use_rag and _vector_store:
+            rag_results = await unified_rag_search(last_user_message, top_k=5)
             rag_context = build_rag_context(rag_results)
+            log_a2a_event('chat.completions', 'rag_search',
+                          f'Found {len(rag_results)} RAG results')
 
-    # Combine file context with RAG context
-    combined_context = ""
-    if file_context and rag_context:
-        combined_context = f"{file_context}\n\n{rag_context}"
-    elif file_context:
-        combined_context = file_context
-    elif rag_context:
-        combined_context = rag_context
+        # 7. Log API event
+        if _event_logger:
+            try:
+                duration_ms = (time.time() - start_time) * 1000
+                _event_logger.log_api_event(
+                    endpoint='/v1/chat/completions',
+                    method='POST',
+                    request_data={
+                        'model': request.model,
+                        'query': last_user_message[:500],
+                        'streaming': request.stream,
+                        'use_rag': use_rag
+                    },
+                    status_code=200,
+                    duration_ms=duration_ms
+                )
+            except Exception as e:
+                logger.warning(f'Failed to log API event: {e}')
 
-    # Generate response
-    if request.stream:
-        return StreamingResponse(
-            generate_streaming_response(
-                request,
-                model_config,
-                combined_context,
-                rag_results,
-                file_display_info
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            }
-        )
-    else:
-        response = await generate_non_streaming_response(request, model_config, combined_context)
+        # 8. If streaming: return StreamingResponse
+        if request.stream:
+            return StreamingResponse(
+                generate_streaming_response(
+                    request, model_config, rag_context, rag_results, file_display_info
+                ),
+                media_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'X-Accel-Buffering': 'no'
+                }
+            )
+
+        # 9. If not streaming: return non-streaming response
+        response = await generate_non_streaming_response(request, model_config, rag_context)
         return response
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'Chat completion error: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Health check endpoint
-@router.get("/health")
+
+@router.get('/health')
 async def openai_health():
-    """Health check for OpenAI-compatible API."""
+    """Health check endpoint for OpenAI-compatible API."""
     return {
-        "status": "ok",
-        "models_available": len(REASONING_MODELS),
-        "vector_store_available": _vector_store is not None,
-        "reasoning_ensemble_available": _reasoning_ensemble is not None,
-        "local_agent_available": _local_agent is not None
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'interceptor_available': INTERCEPTOR_AVAILABLE,
+        'vector_store_available': _vector_store is not None,
+        'reasoning_ensemble_available': _reasoning_ensemble is not None,
+        'local_agent_available': _local_agent is not None,
+        'event_logger_available': _event_logger is not None,
+        'file_handler_available': _file_handler is not None,
+        'a2a_handler_available': _a2a_handler is not None
     }

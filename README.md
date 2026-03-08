@@ -34,6 +34,7 @@ Jupyter notebooks and interactive tutorials covering:
 | oracle_langchain_example            | Build a RAG application using Oracle 26ai vector storage and LangChain                                  | Oracle AI Database, langchain-oracledb, HuggingFace | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=flat-square)](./notebooks/oracle_langchain_example.ipynb)            |
 | oracle_rag_agents_zero_to_hero      | Learn to build RAG agents from scratch using Oracle AI Database.                                        | Oracle AI Database, OpenAI, OpenAI Agents SDK       | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=flat-square)](./notebooks/oracle_rag_agents_zero_to_hero.ipynb)      |
 | oracle_rag_with_evals               | Build RAG systems with comprehensive evaluation metrics                                                 | Oracle AI Database, OpenAI, BEIR, Galileo           | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=flat-square)](./notebooks/oracle_rag_with_evals.ipynb)               |
+| agent_reasoning_demo                | Interactive demo of 11 cognitive architectures (CoT, ToT, ReAct, Self-Reflection, and more) for agent reasoning | Ollama, agent-reasoning                             | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=flat-square)](./notebooks/agent_reasoning_demo.ipynb)                |
 
 ### 📚 **Guides** (`/guides`)
 

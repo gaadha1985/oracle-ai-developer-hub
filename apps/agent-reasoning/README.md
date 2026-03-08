@@ -1,12 +1,12 @@
 # Agent Reasoning: The Thinking Layer
 
-[![PyPI](https://img.shields.io/pypi/v/agent-reasoning)](https://pypi.org/project/agent-reasoning/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/agent-reasoning)](https://pypi.org/project/agent-reasoning/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-![Ollama](https://img.shields.io/badge/backend-Ollama-black)
-![Reasoning](https://img.shields.io/badge/reasoning-CoT%20|%20ToT%20|%20ReAct%20|%20Refinement-purple)
-![Status](https://img.shields.io/badge/status-experimental-orange)
+[![PyPI](https://img.shields.io/pypi/v/agent-reasoning?style=for-the-badge)](https://pypi.org/project/agent-reasoning/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/agent-reasoning?style=for-the-badge)](https://pypi.org/project/agent-reasoning/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge)](https://www.python.org/)
+![Ollama](https://img.shields.io/badge/backend-Ollama-black?style=for-the-badge)
+![Reasoning](https://img.shields.io/badge/reasoning-CoT%20|%20ToT%20|%20ReAct%20|%20Reflection%20|%20RLM%20|%20Consistency%20|%20Decomposed%20|%20LtM%20|%20Refinement-purple?style=for-the-badge)
+![Status](https://img.shields.io/badge/status-experimental-orange?style=for-the-badge)
 
 ![](https://raw.githubusercontent.com/jasperan/agent-reasoning/main/gif/arena_mode.gif)
 
@@ -23,7 +23,7 @@ This repository transforms standard Open Source models (like `gemma3`, `llama3`)
 ## Quick Start (3 commands)
 
 ```bash
-pip install agent-reasoning && ollama pull gemma3:270m && agent-reasoning
+uv sync && ollama pull gemma3:270m && uv run agent-reasoning
 ```
 
 ## 📦 Installation
@@ -32,17 +32,47 @@ pip install agent-reasoning && ollama pull gemma3:270m && agent-reasoning
 
 ```bash
 pip install agent-reasoning
+# or
+uv add agent-reasoning
 
 # With server dependencies (for the reasoning gateway):
 pip install "agent-reasoning[server]"
+# or
+uv add "agent-reasoning[server]"
 ```
 
-### From Source
+### From Source with uv
 
 ```bash
 git clone https://github.com/jasperan/agent-reasoning.git
 cd agent-reasoning
-pip install -e ".[server,dev]"
+uv sync
+uv run agent-reasoning
+```
+
+### Development
+
+```bash
+# Sync dependencies
+uv sync
+
+# Run tests
+uv run pytest
+
+# Lint code
+uv run ruff check .
+
+# Format code
+uv run ruff format .
+
+# Type check
+uv run ty check .
+
+# Add a new dependency
+uv add <package>
+
+# Add a dev dependency
+uv add --dev <package>
 ```
 
 **Prerequisite**: [Ollama](https://ollama.com/) must be running locally, or you can connect to a remote Ollama instance.
@@ -101,7 +131,7 @@ Interactive Jupyter notebooks demonstrating agent reasoning capabilities:
 
 | Name | Description | Stack | Link |
 | ---- | ----------- | ----- | ---- |
-| agent_reasoning_demo | Comprehensive demo of all reasoning strategies (CoT, ToT, ReAct, Self-Reflection) with benchmarks and comparisons | Ollama, Gemma3/Llama3, FastAPI | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=flat-square)](https://github.com/jasperan/agent-reasoning/blob/main/notebooks/agent_reasoning_demo.ipynb) |
+| agent_reasoning_demo | Comprehensive demo of all reasoning strategies (CoT, ToT, ReAct, Self-Reflection) with benchmarks and comparisons | Ollama, Gemma3/Llama3, FastAPI | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-orange?style=for-the-badge)](https://github.com/jasperan/agent-reasoning/blob/main/notebooks/agent_reasoning_demo.ipynb) |
 
 ---
 
@@ -525,3 +555,12 @@ Normalized heatmap where green = better performance. Latency and TTFT are invert
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+[![GitHub](https://img.shields.io/badge/GitHub-jasperan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jasperan)&nbsp;
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-jasperan-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jasperan/)
+
+</div>

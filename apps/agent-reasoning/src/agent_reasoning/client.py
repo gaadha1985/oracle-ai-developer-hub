@@ -3,7 +3,7 @@ import requests
 import sys
 
 class OllamaClient:
-    def __init__(self, model="gemma3:270m", base_url=None):
+    def __init__(self, model="gemma3:latest", base_url=None):
         if base_url is None:
             from agent_reasoning.config import get_ollama_host
             base_url = get_ollama_host()
@@ -46,5 +46,7 @@ class OllamaClient:
                 yield body.get("response", "")
 
         except requests.exceptions.RequestException as e:
-            print(f"Error communicating with Ollama: {e}", file=sys.stderr)
-            yield ""
+            error_msg = f"[OllamaClient] Error communicating with Ollama (model={self.model}): {e}"
+            print(error_msg, file=sys.stderr)
+            print(error_msg)  # Also print to stdout so it's visible in logs
+            yield f"Error: Could not reach Ollama model '{self.model}'. Please check the model is available (ollama list)."

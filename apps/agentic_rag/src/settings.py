@@ -2,11 +2,10 @@
 Settings API for Agentic RAG System.
 
 Provides endpoints to configure:
-- Active LLM model (default: gemma3:latest)
+- Active LLM model (default: qwen3.5:9b)
 - Model parameters
 - System preferences
 """
-
 import os
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
@@ -17,28 +16,26 @@ router = APIRouter(prefix="/v1/settings", tags=["Settings"])
 
 
 class ModelSetting(BaseModel):
-    """Current model configuration."""
     model_name: str
     description: Optional[str] = None
 
+    model_config = {"protected_namespaces": ()}
+
 
 class SettingsResponse(BaseModel):
-    """Full settings response."""
     model: ModelSetting
     available_models: List[str]
 
 
 class UpdateModelRequest(BaseModel):
-    """Request to update the active model."""
     model_name: str
 
+    model_config = {"protected_namespaces": ()}
 
-# Global settings state
+
 _current_settings = {
-    "model_name": os.getenv("DEFAULT_MODEL", "gemma3:latest"),
+    "model_name": os.getenv("DEFAULT_MODEL", "qwen3.5:9b"),
 }
-
-# Callback functions to update components when settings change
 _on_model_change_callbacks = []
 
 
@@ -47,54 +44,44 @@ def register_model_change_callback(callback):
     _on_model_change_callbacks.append(callback)
 
 
-def get_current_model() -> str:
+def get_current_model():
     """Get the current active model name."""
     return _current_settings["model_name"]
 
 
-def set_current_model(model_name: str):
-    """Set the current active model name."""
+def set_current_model(model_name):
+    """Set the current active model name and notify callbacks."""
     _current_settings["model_name"] = model_name
-    # Notify all registered callbacks
     for callback in _on_model_change_callbacks:
         try:
             callback(model_name)
         except Exception as e:
-            print(f"Error in model change callback: {e}")
+            print(f"⚠️ Model change callback error: {e}")
 
 
-def get_available_ollama_models() -> List[str]:
+def get_available_ollama_models():
     """Get list of available Ollama models."""
     try:
         import ollama
+
         models_response = ollama.list()
-        models = []
-
-        # Handle different ollama library response formats
-        # Newer ollama library returns ListResponse object with .models attribute
-        if hasattr(models_response, 'models'):
-            model_list = models_response.models
-        elif isinstance(models_response, dict) and "models" in models_response:
-            model_list = models_response["models"]
-        else:
-            model_list = []
-
+        model_list = (
+            models_response.models
+            if hasattr(models_response, "models")
+            else models_response.get("models", [])
+        )
+        available = []
         for model in model_list:
-            # Handle both dict and object formats
-            if hasattr(model, 'model'):
-                model_name = model.model
+            if hasattr(model, "model"):
+                available.append(model.model)
             elif isinstance(model, dict) and "name" in model:
-                model_name = model["name"]
+                available.append(model["name"])
             else:
-                model_name = str(model)
-
-            if model_name:
-                models.append(model_name)
-
-        return sorted(models)
+                available.append(str(model))
+        return available
     except Exception as e:
-        print(f"Error listing Ollama models: {e}")
-        return ["gemma3:latest", "gemma3:270m", "llama3:latest", "mistral:latest"]
+        print(f"⚠️ Could not list Ollama models: {e}")
+        return [_current_settings["model_name"]]
 
 
 @router.get("", response_model=SettingsResponse)
@@ -104,40 +91,29 @@ async def get_settings():
     return SettingsResponse(
         model=ModelSetting(
             model_name=_current_settings["model_name"],
-            description=f"Currently using {_current_settings['model_name']} for reasoning"
+            description=f"Currently using {_current_settings['model_name']} for reasoning",
         ),
-        available_models=available_models
+        available_models=available_models,
     )
 
 
 @router.get("/model")
 async def get_current_model_endpoint():
     """Get the current active model."""
-    return {
-        "model_name": _current_settings["model_name"]
-    }
+    return {"model_name": _current_settings["model_name"]}
 
 
-@router.post("/model")
+@router.put("/model")
 async def update_model(request: UpdateModelRequest):
-    """
-    Update the active LLM model.
-
-    This will reinitialize the reasoning ensemble and local agent
-    with the new model.
-    """
-    # Validate model exists in Ollama
+    """Update the active LLM model."""
     available = get_available_ollama_models()
-
-    # Allow any model name (Ollama will handle errors)
     old_model = _current_settings["model_name"]
     set_current_model(request.model_name)
-
     return {
         "success": True,
         "previous_model": old_model,
         "current_model": request.model_name,
-        "message": f"Model updated from {old_model} to {request.model_name}"
+        "message": f"Model updated from {old_model} to {request.model_name}",
     }
 
 
@@ -148,40 +124,24 @@ async def list_available_models():
     return {
         "models": models,
         "count": len(models),
-        "current": _current_settings["model_name"]
+        "current": _current_settings["model_name"],
     }
 
 
-@router.post("/model/test")
+@router.post("/test-model")
 async def test_model(request: UpdateModelRequest):
-    """
-    Test if a model is available and working.
-
-    Sends a simple prompt to verify the model responds.
-    """
+    """Test if a model is available and working."""
     try:
         import ollama
 
-        # Simple test prompt
-        response = ollama.generate(
+        response = ollama.chat(
             model=request.model_name,
-            prompt="Say 'OK' if you can hear me.",
-            options={"num_predict": 10}
+            messages=[{"role": "user", "content": "Say hello in one word."}],
         )
-
         return {
             "success": True,
             "model": request.model_name,
-            "response": response.get("response", "")[:100],
-            "message": f"Model {request.model_name} is working"
+            "response": response.get("message", {}).get("content", ""),
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "success": False,
-                "model": request.model_name,
-                "error": str(e),
-                "message": f"Model {request.model_name} failed: {str(e)}"
-            }
-        )
+        raise HTTPException(status_code=400, detail=f"Model test failed: {str(e)}")

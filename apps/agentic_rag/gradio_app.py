@@ -72,12 +72,12 @@ max_response_length = config.get('MAX_RESPONSE_LENGTH', 2048)  # Default to 2048
 openai_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize agents with use_cot=True to ensure CoT is available
-# Default to Ollama gemma3:270m
+# Default to Ollama qwen3.5:9b
 try:
-    local_agent = LocalRAGAgent(vector_store, model_name="ollama:gemma3:270m", use_cot=True, max_response_length=max_response_length)
-    print("Using Ollama gemma3:270m as default model")
+    local_agent = LocalRAGAgent(vector_store, model_name="qwen3.5:9b", use_cot=True, max_response_length=max_response_length)
+    print("Using Ollama qwen3.5:9b as default model")
 except Exception as e:
-    print(f"Could not initialize Ollama gemma3:270m: {str(e)}")
+    print(f"Could not initialize Ollama qwen3.5:9b: {str(e)}")
     local_agent = None
     print("No local model available")
 
@@ -85,7 +85,7 @@ except Exception as e:
 reasoning_ensemble = None
 try:
     reasoning_ensemble = RAGReasoningEnsemble(
-        model_name="gemma3:270m",
+        model_name="qwen3.5:9b",
         vector_store=vector_store,
         event_logger=None
     )
@@ -99,8 +99,8 @@ openai_agent = None
 class A2AClient:
     """A2A client for testing A2A protocol functionality"""
     
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
+    def __init__(self, base_url: str = None):
+        self.base_url = base_url or os.getenv('A2A_BASE_URL', 'http://localhost:8000')
         self.session = requests.Session()
         self.session.timeout = 30
     
@@ -163,7 +163,7 @@ class A2AClient:
     def get_agent_card(self) -> Dict[str, Any]:
         """Get the agent card"""
         try:
-            response = self.session.get(f"{self.base_url}/agent_card")
+            response = self.session.get(f"{self.base_url}/a2a/card")
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -256,28 +256,44 @@ def process_repo(repo_path: str) -> str:
         print(f"❌ [A2A Event] Method: document.upload | Type: repo | Status: error | Message: {str(e)}")
         return f"✗ Error processing repository: {str(e)}"
 
-def convert_to_messages_format(history):
-    """Convert history from tuple format to messages format for Gradio compatibility"""
-    messages = []
-    for item in history:
-        if isinstance(item, dict) and "role" in item and "content" in item:
-            # Already in messages format
-            messages.append(item)
-        elif isinstance(item, (list, tuple)) and len(item) == 2:
-            # Tuple format: [user_msg, assistant_msg]
-            user_msg, assistant_msg = item
-            if user_msg:  # Only add if user message exists
-                messages.append({"role": "user", "content": str(user_msg) if user_msg is not None else ""})
-            if assistant_msg:  # Only add if assistant message exists
-                messages.append({"role": "assistant", "content": str(assistant_msg) if assistant_msg is not None else ""})
-        elif isinstance(item, (list, tuple)) and len(item) == 1:
-            # Single message (assistant-only)
-            messages.append({"role": "assistant", "content": str(item[0]) if item[0] is not None else ""})
-    return messages
+def convert_to_tuples_format(history):
+    """Convert history from any format to tuples format for Gradio Chatbot.
+
+    Chatbot expects: [[user_msg, assistant_msg], ...]
+    Input may be dicts ({"role":..., "content":...}) or already tuples.
+    """
+    if not history:
+        return []
+    # If already in tuples format, pass through
+    if history and isinstance(history[0], (list, tuple)) and len(history[0]) == 2:
+        return [list(item) for item in history]
+    # Convert from dict format to tuples
+    tuples = []
+    i = 0
+    items = list(history)
+    while i < len(items):
+        item = items[i]
+        if isinstance(item, dict):
+            role = item.get("role", "assistant")
+            content = item.get("content", "")
+            if role == "user":
+                # Look ahead for assistant reply
+                assistant_content = None
+                if i + 1 < len(items):
+                    next_item = items[i + 1]
+                    if isinstance(next_item, dict) and next_item.get("role") == "assistant":
+                        assistant_content = next_item.get("content", "")
+                        i += 1
+                tuples.append([content, assistant_content])
+            else:
+                # Assistant message without preceding user message
+                tuples.append([None, content])
+        i += 1
+    return tuples
 
 def sanitize_history(history):
-    """Sanitize and convert history to messages format for Gradio compatibility"""
-    return convert_to_messages_format(history)
+    """Sanitize and convert history to tuples format for Gradio Chatbot"""
+    return convert_to_tuples_format(history)
 
 def chat(message: str, history, agent_type: str, use_cot: bool, collection: str):
     """Process chat message using selected agent and collection"""
@@ -319,8 +335,20 @@ def chat(message: str, history, agent_type: str, use_cot: bool, collection: str)
             model_type = "Ollama"
             model_name = agent_type
         
-        # Convert input history to messages format for processing
-        history = convert_to_messages_format(history) if history else []
+        # Normalize incoming history to list of dicts for internal processing
+        if history:
+            normalized = []
+            for item in history:
+                if isinstance(item, dict) and "role" in item:
+                    normalized.append(item)
+                elif isinstance(item, (list, tuple)) and len(item) == 2:
+                    if item[0] is not None:
+                        normalized.append({"role": "user", "content": str(item[0])})
+                    if item[1] is not None:
+                        normalized.append({"role": "assistant", "content": str(item[1])})
+            history = normalized
+        else:
+            history = []
         
         # Select appropriate agent and reinitialize with correct settings
         if model_type == "OpenAI":
@@ -963,10 +991,12 @@ def unified_reasoning_chat(
 ):
     """
     Unified chat function that handles reasoning ensemble.
-    Returns: (history, execution_trace, strategy_responses, final_answer)
+    Yields: (execution_trace, strategy_responses, final_answer) as streaming updates.
     """
+    global reasoning_ensemble
     if not message or not message.strip():
-        return history or [], "", "", ""
+        yield "", "", ""
+        return
 
     if not strategies:
         strategies = ["cot"]  # Default to CoT
@@ -989,78 +1019,94 @@ def unified_reasoning_chat(
     }
     mapped_collection = collection_mapping.get(collection, "PDF")
 
-    # Run ensemble
+    # Run ensemble with streaming
     if reasoning_ensemble:
         try:
-            # Run async function synchronously
+            # Update ensemble model if dropdown selection differs
+            if model and model != reasoning_ensemble.model_name:
+                reasoning_ensemble = RAGReasoningEnsemble(
+                    model_name=model,
+                    vector_store=vector_store,
+                    event_logger=None
+                )
+                print(f"[Reasoning] Switched ensemble model to: {model}")
+
+            # Stream execution events for real-time UI updates
+            trace_lines = []
+            execution_trace = ""
+            strategy_responses = ""
+            final_answer = "⏳ Processing..."
+
+            # Yield initial state
+            yield execution_trace, strategy_responses, final_answer
+
+            # Collect events from async streaming generator
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(reasoning_ensemble.run(
-                query=message,
-                strategies=strategies,
-                use_rag=use_rag,
-                collection=mapped_collection,
-                config=config if config else None
-            ))
+
+            async def collect_events():
+                events = []
+                async for event in reasoning_ensemble.run_with_streaming(
+                    query=message,
+                    strategies=strategies,
+                    use_rag=use_rag,
+                    collection=mapped_collection,
+                    config=config if config else None
+                ):
+                    events.append(event)
+                return events
+
+            all_events = loop.run_until_complete(collect_events())
             loop.close()
 
-            # Format execution trace
-            trace_lines = []
-            for event in result.execution_trace:
-                trace_lines.append(f"{event.timestamp} │ {event.message}")
-            execution_trace = "\n".join(trace_lines)
+            # Process events and yield updates
+            final_result = None
+            for event in all_events:
+                if event.event_type == 'result' and event.data and 'result' in event.data:
+                    final_result = event.data['result']
+                else:
+                    trace_lines.append(f"{event.timestamp} │ {event.message}")
+                    execution_trace = "\n".join(trace_lines)
+                    yield execution_trace, strategy_responses, final_answer
 
-            # Format strategy responses
-            response_blocks = []
-            for resp in result.all_responses:
-                is_winner = resp["strategy"] == result.winner["strategy"]
-                icon = reasoning_ensemble.get_strategy_icon(resp["strategy"])
-                name = reasoning_ensemble.get_strategy_display_name(resp["strategy"])
-                duration = resp["duration_ms"] / 1000
-
-                winner_badge = "🏆 " if is_winner else ""
-                vote_info = f" ({result.winner['vote_count']} votes)" if is_winner and result.voting_details else ""
-
-                # Truncate long responses
-                resp_text = resp["response"]
-                if len(resp_text) > 500:
-                    resp_text = resp_text[:500] + "..."
-
-                block = f"""### {winner_badge}{icon} {name}{vote_info} ⏱️ {duration:.1f}s
+            # Format final results
+            if final_result:
+                result = final_result
+                response_blocks = []
+                for resp in result.all_responses:
+                    is_winner = resp["strategy"] == result.winner["strategy"]
+                    icon = reasoning_ensemble.get_strategy_icon(resp["strategy"])
+                    name = reasoning_ensemble.get_strategy_display_name(resp["strategy"])
+                    duration = resp["duration_ms"] / 1000
+                    winner_badge = "🏆 " if is_winner else ""
+                    vote_info = f" ({result.winner['vote_count']} votes)" if is_winner and result.voting_details else ""
+                    resp_text = resp["response"]
+                    block = f"""### {winner_badge}{icon} {name}{vote_info} ⏱️ {duration:.1f}s
 
 {resp_text}
 """
-                response_blocks.append(block)
+                    response_blocks.append(block)
 
-            strategy_responses = "\n---\n".join(response_blocks)
+                strategy_responses = "\n---\n".join(response_blocks)
 
-            # Format final answer
-            sources_text = ""
-            if result.rag_context and result.rag_context.get("sources"):
-                sources_text = "\n\n📚 **Sources:** " + ", ".join(result.rag_context["sources"])
+                sources_text = ""
+                if result.rag_context and result.rag_context.get("sources"):
+                    sources_text = "\n\n📚 **Sources:** " + ", ".join(result.rag_context["sources"])
 
-            final_answer = result.winner["response"] + sources_text
-
-            # Update history
-            history = history or []
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": final_answer})
-
-            return history, execution_trace, strategy_responses, final_answer
+                final_answer = result.winner["response"] + sources_text
+                yield execution_trace, strategy_responses, final_answer
+            else:
+                final_answer = "No result received from ensemble."
+                yield execution_trace, strategy_responses, final_answer
 
         except Exception as e:
             error_msg = f"Error running reasoning ensemble: {str(e)}"
             print(error_msg)
-            history = history or []
-            history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": f"⚠️ {error_msg}"})
-            return history, f"Error: {str(e)}", "", error_msg
+            import traceback
+            traceback.print_exc()
+            yield f"Error: {str(e)}", "", f"⚠️ {error_msg}"
     else:
-        # Fallback to simple response
-        history = history or []
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": "Reasoning ensemble not initialized. Please check the configuration."})
-        return history, "Reasoning ensemble not available", "", "Reasoning ensemble not initialized"
+        yield "Reasoning ensemble not available", "", "Reasoning ensemble not initialized. Please check the configuration."
 
 
 # Custom CSS for A2A Trace (module level for Gradio 6.0 compatibility)
@@ -1211,25 +1257,27 @@ def create_interface():
                 </div>
                 """)
             
-            # Create model choices list for reuse
+            # Create model choices list dynamically from Ollama
             model_choices = []
-            # Only Ollama models (no more local Mistral deployments)
-            model_choices.extend([
-                "qwq",
-                "gemma3",
-                "llama3.3",
-                "phi4",
-                "mistral",
-                "llava",
-                "phi3",
-                "deepseek-r1",
-                "gemma3:270m"
-            ])
+            default_model = "qwen3.5:9b"
+            try:
+                import ollama as _ollama_check
+                _ollama_models = _ollama_check.list().models
+                model_choices = [m.model for m in _ollama_models]
+                print(f"[UI] Loaded {len(model_choices)} models from Ollama: {model_choices}")
+                # Pick a sensible default from available models
+                if model_choices:
+                    for preferred in ["qwen3.5:9b", "qwen3.5:35b-a3b", "qwen3:8b"]:
+                        if preferred in model_choices:
+                            default_model = preferred
+                            break
+                    else:
+                        default_model = model_choices[0]
+            except Exception as _e:
+                print(f"[UI] Could not fetch Ollama models: {_e}. Using fallback list.")
+                model_choices = ["qwen3.5:9b", "phi3:latest"]
             if openai_key:
                 model_choices.append("openai")
-            
-            # Set default model to qwq
-            default_model = "gemma3"
             
             # Wrapper for all tabs to ensure they are grouped together
             with gr.Tabs():
@@ -1262,7 +1310,7 @@ def create_interface():
                     | Model | Parameters | Size | Download Command |
                     |-------|------------|------|------------------|
                     | qwq | 32B | 20GB | qwq:latest |
-                    | gemma3 | 4B | 3.3GB | gemma3:latest |
+                    | qwen3.5 | 9B | ~5.7GB | qwen3.5:9b |
                     | llama3.3 | 70B | 43GB | llama3.3:latest |
                     | phi4 | 14B | 9.1GB | phi4:latest |
                     | mistral | 7B | 4.1GB | mistral:latest |
@@ -1467,11 +1515,11 @@ def create_interface():
                         return all_strategy_values
 
                     def reasoning_chat_wrapper(message, model, use_rag, collection, strategies, tot_depth, consistency_samples, reflection_turns):
-                        """Wrapper that calls unified_reasoning_chat without history."""
-                        _, execution_trace, strategy_responses, final_answer = unified_reasoning_chat(
+                        """Streaming wrapper that yields updates as ensemble progresses."""
+                        for execution_trace, strategy_responses, final_answer in unified_reasoning_chat(
                             message, [], model, use_rag, collection, strategies, tot_depth, consistency_samples, reflection_turns
-                        )
-                        return execution_trace, strategy_responses, final_answer
+                        ):
+                            yield execution_trace, strategy_responses, final_answer
 
                     toggle_all_strategies_btn.click(
                         toggle_all_strategies,
@@ -1706,16 +1754,15 @@ def create_interface():
                     # Generate a mock Task ID
                     task_id = f"a2a-demo-{int(time.time())}-{random.randint(1000, 9999)}"
                     
-                    # Helper for chat messages (using list of list format for older Gradio compatibility)
+                    # Helper for chat messages (tuples format: [user_msg, bot_msg])
                     def msg(content):
                         # Log to stdout
                         print(f"[A2A Demo Trace] {content}")
-                        # Returns message dictionary for new Gradio Chatbot format
-                        return {"role": "assistant", "content": content}
-                        
+                        return [None, content]
+
                     # Helper for user messages
                     def user_msg(content):
-                        return {"role": "user", "content": content}
+                        return [content, None]
 
                     new_history = list(current_history) if current_history else []
                     
@@ -2048,19 +2095,7 @@ def main():
             models = ollama.list().models
             available_models = [model.model for model in models]
             
-            # Check if any default models are available
-            if "gemma3:270m" not in available_models and "gemma3:270m:latest" not in available_models:
-                print("⚠️ Warning: Ollama is running but default model (gemma3:270m) is not available.")
-                print("Please download it through the Model Management tab or run:")
-                print("    ollama pull gemma3:270m")
-            else:
-                available_default_models = []
-                for model in ["gemma3:270m"]:
-                    if model in available_models or f"{model}:latest" in available_models:
-                        available_default_models.append(model)
-                
-                print(f"✅ Ollama is running with available default models: {', '.join(available_default_models)}")
-                print(f"All available models: {', '.join(available_models)}")
+            print(f"✅ Ollama is running with {len(available_models)} models: {', '.join(available_models)}")
         except Exception as e:
             print(f"⚠️ Warning: Ollama is installed but not running or encountered an error: {str(e)}")
             print("Please start Ollama before using the interface.")
@@ -2227,7 +2262,7 @@ if __name__ == "__main__":
     def start_api_server_if_needed():
         """Check if API server is running, if not start it"""
         try:
-            requests.get("http://localhost:8000/docs", timeout=1)
+            requests.get(f"{a2a_base_url}/docs", timeout=1)
             print("✅ A2A API Server is already running")
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             print("⚠️ A2A API Server not running. Starting it automatically...")

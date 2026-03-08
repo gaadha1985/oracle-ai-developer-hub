@@ -6,12 +6,12 @@
   <h3>$10 Hardware · 10MB RAM · 1s Boot · Oracle AI Vector Search · ollama-based </h3>
 
   <p>
-    <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white" alt="Go">
-    <img src="https://img.shields.io/badge/Arch-x86__64%2C%20ARM64%2C%20RISC--V-blue" alt="Hardware">
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-    <br>
-    <a href="https://picoclaw.io"><img src="https://img.shields.io/badge/Website-picoclaw.io-blue?style=flat&logo=google-chrome&logoColor=white" alt="Website"></a>
-    <a href="https://x.com/SipeedIO"><img src="https://img.shields.io/badge/X_(Twitter)-SipeedIO-black?style=flat&logo=x&logoColor=white" alt="Twitter"></a>
+    <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+    <img src="https://img.shields.io/badge/Arch-x86__64%2C%20ARM64%2C%20RISC--V-blue?style=for-the-badge" alt="Hardware">
+    <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
+    <img src="https://img.shields.io/badge/backend-Ollama-black?style=for-the-badge" alt="Ollama">
+    <a href="https://docs.oracle.com/en-us/iaas/Content/generative-ai/home.htm"><img src="https://img.shields.io/badge/OCI-GenAI-F80000.svg?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI GenAI"></a>
+    <a href="https://www.oracle.com/database/free/"><img src="https://img.shields.io/badge/Oracle_AI_Database-26ai_Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="Oracle AI Database 26ai Free"></a>
   </p>
 
   <p>
@@ -77,7 +77,7 @@ Set reminders, run recurring tasks, automate workflows — scheduled jobs are st
 
 ## Quickstart (5 minutes)
 
-Everything you need: **Go 1.24+**, **Ollama** and **Docker** (for Oracle AI Database).
+Everything you need: **Go 1.24+**, **Ollama** and **Docker** (for [Oracle AI Database 26ai Free](https://www.oracle.com/database/free/)).
 
 ### Step 1: Build
 
@@ -146,7 +146,7 @@ Deploy a fully configured PicoOraClaw instance on OCI with Oracle AI Database, O
 **What gets deployed:**
 - OCI Compute instance (shape of your choice, ARM A1.Flex is Always Free)
 - Ollama with `gemma3:270m` pre-loaded for CPU inference
-- Oracle AI Database (container by default, or managed Autonomous DB)
+- **Oracle AI Database 26ai Free** container by default (or optional Autonomous AI Database when toggled)
 - PicoOraClaw gateway running as a systemd service
 
 **After deployment (~5-8 min for setup to complete):**
@@ -175,7 +175,7 @@ Run the setup script — it handles everything automatically:
 ```
 
 This single script:
-1. Pulls and starts the Oracle AI Database Free container
+1. Pulls and starts the Oracle AI Database 26ai Free container
 2. Waits for the database to be ready
 3. Creates the `picooraclaw` database user with the required grants
 4. Patches your `~/.picooraclaw/config.json` with the Oracle connection settings
@@ -641,6 +641,60 @@ Get a key at [bigmodel.cn](https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys
 
 </details>
 
+## OCI Generative AI (Optional)
+
+PicoOraClaw can optionally use **OCI Generative AI** as an LLM backend via the `oci-openai` Python library. This is **not required** — Ollama remains the default and recommended LLM backend.
+
+### Why OCI GenAI?
+
+- **Enterprise models** — Access xAI Grok, Meta Llama, Cohere, and other models through OCI
+- **OCI-native auth** — Uses your existing `~/.oci/config` profile (no separate API keys)
+- **Same region as your database** — Run inference and storage in the same OCI region
+
+### Setup
+
+1. **Install the OCI GenAI proxy:**
+   ```bash
+   cd oci-genai
+   pip install -r requirements.txt
+   ```
+
+2. **Configure OCI credentials** (`~/.oci/config`):
+   ```ini
+   [DEFAULT]
+   user=ocid1.user.oc1..aaaaaaaaexample
+   fingerprint=aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99
+   tenancy=ocid1.tenancy.oc1..aaaaaaaaexample
+   region=us-chicago-1
+   key_file=~/.oci/oci_api_key.pem
+   ```
+
+3. **Set environment variables:**
+   ```bash
+   export OCI_PROFILE=DEFAULT
+   export OCI_REGION=us-chicago-1
+   export OCI_COMPARTMENT_ID=ocid1.compartment.oc1..your-compartment-ocid
+   ```
+
+4. **Start the OCI GenAI proxy:**
+   ```bash
+   cd oci-genai
+   python proxy.py
+   # Proxy runs at http://localhost:9999/v1
+   ```
+
+5. **Configure PicoOraClaw** (`~/.picooraclaw/config.json`):
+   ```json
+   {
+     "provider": "openai",
+     "api_base": "http://localhost:9999/v1",
+     "api_key": "oci-genai",
+     "model": "meta.llama-3.3-70b-instruct"
+   }
+   ```
+
+See [`oci-genai/README.md`](oci-genai/README.md) for full documentation.
+
 ---
 
 ## Chat Channels
@@ -715,7 +769,7 @@ Run `picooraclaw gateway` after configuring.
 
 ---
 
-## Oracle on Autonomous Database (Cloud)
+## Oracle on Autonomous AI Database (Cloud, Optional)
 
 <details>
 <summary><b>ADB wallet-less TLS</b></summary>
@@ -856,10 +910,21 @@ docker compose run --rm picoclaw-agent -m "What is 2+2?"
 
 - Single static binary (~10MB RAM), runs on RISC-V/ARM64/x86_64
 - Ollama, OpenRouter, Anthropic, OpenAI, Gemini, Zhipu, DeepSeek, Groq providers
-- Oracle AI Database with AI Vector Search (384-dim ONNX embeddings)
+- **Default: [Oracle AI Database 26ai Free](https://www.oracle.com/database/free/)** with AI Vector Search (384-dim ONNX embeddings)
 - Chat channels: Telegram, Discord, Slack, QQ, DingTalk, LINE, Feishu, WhatsApp
 - Scheduled tasks via cron expressions
 - Heartbeat periodic tasks
 - Skills system (workspace, global, GitHub-hosted)
 - Security sandbox with workspace restriction
+- Optional: [Oracle Autonomous AI Database](https://www.oracle.com/autonomous-database/) for managed cloud deployment
 - Graceful fallback to file-based storage when Oracle is unavailable
+
+---
+
+<div align="center">
+
+[![GitHub](https://img.shields.io/badge/GitHub-jasperan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jasperan)&nbsp;
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-jasperan-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jasperan/)&nbsp;
+[![Oracle](https://img.shields.io/badge/Oracle_AI_Database-26ai_Free-F80000?style=for-the-badge&logo=oracle&logoColor=white)](https://www.oracle.com/database/free/)
+
+</div>
