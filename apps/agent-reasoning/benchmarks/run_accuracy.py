@@ -16,7 +16,6 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -32,7 +31,6 @@ from src.benchmarks.accuracy import (
     get_model_fingerprint,
 )
 
-
 # Strategy tiers by speed (LLM calls per question)
 FAST_STRATEGIES = ["standard", "cot", "decomposed", "least_to_most", "recursive"]
 MEDIUM_STRATEGIES = ["reflection", "consistency", "refinement", "react", "socratic", "analogy"]
@@ -44,21 +42,35 @@ ALL_STRATEGIES = FAST_STRATEGIES + MEDIUM_STRATEGIES + SLOW_STRATEGIES
 def parse_args():
     p = argparse.ArgumentParser(description="Run accuracy benchmarks with HuggingFace datasets")
     p.add_argument("--model", default="qwen3.5:9b", help="Ollama model name (default: qwen3.5:9b)")
-    p.add_argument("--source", choices=["embedded", "huggingface"], default="huggingface",
-                    help="Question source (default: huggingface)")
-    p.add_argument("--samples", type=int, default=100,
-                    help="Questions per dataset for HuggingFace source (default: 100)")
+    p.add_argument(
+        "--source",
+        choices=["embedded", "huggingface"],
+        default="huggingface",
+        help="Question source (default: huggingface)",
+    )
+    p.add_argument(
+        "--samples",
+        type=int,
+        default=100,
+        help="Questions per dataset for HuggingFace source (default: 100)",
+    )
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducible sampling")
-    p.add_argument("--strategies", type=str, default=None,
-                    help="Comma-separated strategy list (default: all)")
-    p.add_argument("--datasets", type=str, default=None,
-                    help="Comma-separated dataset list (default: all)")
-    p.add_argument("--quick", action="store_true",
-                    help="Quick mode: embedded questions, core strategies only")
+    p.add_argument(
+        "--strategies", type=str, default=None, help="Comma-separated strategy list (default: all)"
+    )
+    p.add_argument(
+        "--datasets", type=str, default=None, help="Comma-separated dataset list (default: all)"
+    )
+    p.add_argument(
+        "--quick", action="store_true", help="Quick mode: embedded questions, core strategies only"
+    )
     p.add_argument("--output-dir", default=None, help="Output directory for results")
     p.add_argument("--no-charts", action="store_true", help="Skip chart generation")
-    p.add_argument("--no-think", action="store_true",
-                    help="Disable thinking mode (recommended for qwen3.5 models)")
+    p.add_argument(
+        "--no-think",
+        action="store_true",
+        help="Disable thinking mode (recommended for qwen3.5 models)",
+    )
     return p.parse_args()
 
 
@@ -99,7 +111,7 @@ def main():
     print(f"  Datasets:   {', '.join(datasets or DATASET_REGISTRY.keys())}")
     think_val = False if args.no_think else None
     if args.no_think:
-        print(f"  Think:      disabled")
+        print("  Think:      disabled")
     print(f"  Output:     {out_dir}")
     print("=" * 70)
 
@@ -149,7 +161,8 @@ def main():
             continue
 
         for _ in runner.run_dataset(
-            dataset_id, strategies,
+            dataset_id,
+            strategies,
             on_question_start=on_start,
             on_question_done=on_done,
         ):
@@ -169,9 +182,13 @@ def main():
     print("RESULTS SUMMARY")
     print("=" * 70)
     print(f"  Total evaluations: {total_done}")
-    print(f"  Overall accuracy:  {total_correct}/{total_done} ({total_correct/total_done*100:.1f}%)" if total_done else "")
-    print(f"  Wall time:         {elapsed/60:.1f} min")
-    print(f"  Avg per eval:      {elapsed/total_done:.1f}s" if total_done else "")
+    print(
+        f"  Overall accuracy:  {total_correct}/{total_done} ({total_correct / total_done * 100:.1f}%)"
+        if total_done
+        else ""
+    )
+    print(f"  Wall time:         {elapsed / 60:.1f} min")
+    print(f"  Avg per eval:      {elapsed / total_done:.1f}s" if total_done else "")
     print()
 
     # Pivot table: strategies × datasets
@@ -197,7 +214,7 @@ def main():
             r = lookup.get((did, strat))
             if r:
                 ci_lo, ci_hi = compute_confidence_interval(r.correct, r.total)
-                row += f" {r.accuracy_pct:>5.1f}% ±{(ci_hi-ci_lo)/2:>3.0f}%"
+                row += f" {r.accuracy_pct:>5.1f}% ±{(ci_hi - ci_lo) / 2:>3.0f}%"
                 accs.append(r.accuracy_pct)
             else:
                 row += f" {'—':>12}"
@@ -211,10 +228,14 @@ def main():
     # Save TSV summary
     tsv_path = os.path.join(out_dir, f"accuracy_summary_{ts}.tsv")
     with open(tsv_path, "w") as f:
-        f.write("dataset\tstrategy\tcorrect\ttotal\taccuracy_pct\tci_95_low\tci_95_high\tavg_latency_ms\n")
+        f.write(
+            "dataset\tstrategy\tcorrect\ttotal\taccuracy_pct\tci_95_low\tci_95_high\tavg_latency_ms\n"
+        )
         for r in reports:
             ci_lo, ci_hi = compute_confidence_interval(r.correct, r.total)
-            f.write(f"{r.dataset}\t{r.strategy}\t{r.correct}\t{r.total}\t{r.accuracy_pct}\t{ci_lo}\t{ci_hi}\t{r.avg_latency_ms}\n")
+            f.write(
+                f"{r.dataset}\t{r.strategy}\t{r.correct}\t{r.total}\t{r.accuracy_pct}\t{ci_lo}\t{ci_hi}\t{r.avg_latency_ms}\n"
+            )
     print(f"  Summary TSV:   {tsv_path}")
 
     # Generate charts

@@ -1115,7 +1115,9 @@ class AccuracyBenchmarkRunner:
         self._question_hashes: Dict[str, str] = {}
         self._model_fingerprint: Optional[dict] = None
 
-    def _load_questions(self, dataset_id: str, max_questions: Optional[int] = None) -> List[AccuracyQuestion]:
+    def _load_questions(
+        self, dataset_id: str, max_questions: Optional[int] = None
+    ) -> List[AccuracyQuestion]:
         """Load questions from embedded or HuggingFace source."""
         registry = DATASET_REGISTRY[dataset_id]
 
@@ -1137,6 +1139,7 @@ class AccuracyBenchmarkRunner:
     def _ensure_ollama(max_retries: int = 3, wait: int = 10) -> bool:
         """Check Ollama is reachable; restart via systemd if not."""
         import subprocess
+
         try:
             import requests as _req
         except ImportError:
@@ -1144,12 +1147,17 @@ class AccuracyBenchmarkRunner:
         for attempt in range(max_retries):
             try:
                 r = _req.get("http://localhost:11434/api/tags", timeout=5)
-                if hasattr(r, 'status_code') and r.status_code == 200:
+                if hasattr(r, "status_code") and r.status_code == 200:
                     return True
             except Exception:
                 pass
-            print(f"\n  [HEALTH] Ollama unreachable (attempt {attempt+1}/{max_retries}), restarting...", flush=True)
-            subprocess.run(["sudo", "systemctl", "restart", "ollama"], capture_output=True, timeout=15)
+            print(
+                f"\n  [HEALTH] Ollama unreachable (attempt {attempt + 1}/{max_retries}), restarting...",
+                flush=True,
+            )
+            subprocess.run(
+                ["sudo", "systemctl", "restart", "ollama"], capture_output=True, timeout=15
+            )
             time.sleep(wait)
         return False
 
@@ -1202,14 +1210,17 @@ class AccuracyBenchmarkRunner:
                     consecutive_errors += 1
                     # If 3 consecutive errors, Ollama likely crashed — restart it
                     if consecutive_errors >= 3:
-                        print(f"\n  [HEALTH] 3 consecutive errors, checking Ollama...", flush=True)
+                        print("\n  [HEALTH] 3 consecutive errors, checking Ollama...", flush=True)
                         if self._ensure_ollama():
                             agent = agent_class(model=self.model)
                             if self.think is not None and hasattr(agent, "client"):
                                 agent.client.think = self.think
                             consecutive_errors = 0
                         else:
-                            print(f"\n  [HEALTH] Cannot recover Ollama, aborting {strategy}", flush=True)
+                            print(
+                                f"\n  [HEALTH] Cannot recover Ollama, aborting {strategy}",
+                                flush=True,
+                            )
                             break
 
                 latency = (time.time() - start) * 1000
