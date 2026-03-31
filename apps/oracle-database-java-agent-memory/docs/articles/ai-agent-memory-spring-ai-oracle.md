@@ -1,5 +1,7 @@
 # How I Gave Memory to an AI Agent Using Spring AI and Oracle Database
 
+![Logo](logo.png)
+
 Every LLM has the same problem: it forgets everything the moment the conversation ends, sometimes even during long conversations. Spend twenty minutes explaining your project setup, your constraints, your preferences; and it nails the answer. Close the tab, open a new session, and it greets you like a stranger. All that context, gone.
 
 If you want to build an AI _agent_, something that actually remembers context and knows things about your domain, you need to give it memory. The practical kind, where it actually remembers what you said and can look up facts you taught it.
