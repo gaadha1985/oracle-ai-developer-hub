@@ -256,46 +256,39 @@ def process_repo(repo_path: str) -> str:
         print(f"❌ [A2A Event] Method: document.upload | Type: repo | Status: error | Message: {str(e)}")
         return f"✗ Error processing repository: {str(e)}"
 
-def convert_to_tuples_format(history):
-    """Convert history from any format to tuples format for Gradio Chatbot.
-
-    Chatbot expects: [[user_msg, assistant_msg], ...]
-    Input may be dicts ({"role":..., "content":...}) or already tuples.
-    """
+def convert_to_messages_format(history):
+    """Normalize history to Gradio 6 chatbot messages."""
     if not history:
         return []
-    # If already in tuples format, pass through
-    if history and isinstance(history[0], (list, tuple)) and len(history[0]) == 2:
-        return [list(item) for item in history]
-    # Convert from dict format to tuples
-    tuples = []
-    i = 0
-    items = list(history)
-    while i < len(items):
-        item = items[i]
-        if isinstance(item, dict):
-            role = item.get("role", "assistant")
-            content = item.get("content", "")
-            if role == "user":
-                # Look ahead for assistant reply
-                assistant_content = None
-                if i + 1 < len(items):
-                    next_item = items[i + 1]
-                    if isinstance(next_item, dict) and next_item.get("role") == "assistant":
-                        assistant_content = next_item.get("content", "")
-                        i += 1
-                tuples.append([content, assistant_content])
-            else:
-                # Assistant message without preceding user message
-                tuples.append([None, content])
+    if history and isinstance(history[0], dict):
+        normalized = []
+        for item in history:
+            content = item.get("content")
+            if content is None:
+                continue
+            normalized.append(
+                {
+                    "role": item.get("role", "assistant"),
+                    "content": content,
+                }
+            )
+        return normalized
+
+    messages = []
+    for item in history:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            user_content, assistant_content = item
+            if user_content is not None:
+                messages.append({"role": "user", "content": user_content})
+            if assistant_content is not None:
+                messages.append({"role": "assistant", "content": assistant_content})
         elif isinstance(item, str):
-            tuples.append([None, item])
-        i += 1
-    return tuples
+            messages.append({"role": "assistant", "content": item})
+    return messages
 
 def sanitize_history(history):
-    """Sanitize and convert history to tuples format for Gradio Chatbot"""
-    return convert_to_tuples_format(history)
+    """Sanitize and convert history to Gradio 6 chatbot messages."""
+    return convert_to_messages_format(history)
 
 def chat(message: str, history, agent_type: str, use_cot: bool, collection: str):
     """Process chat message using selected agent and collection"""
@@ -725,7 +718,7 @@ def a2a_chat(message: str, history, agent_type: str, use_cot: bool, collection: 
         # Helper to format and append messages
         def append_msg(role, content, is_intermediate=False):
             if is_intermediate:
-                content = f'<div style="color: grey;">{content}</div>'
+                content = f"*{content}*"
             current_history.append({"role": role, "content": content})
             return current_history
 
@@ -1168,7 +1161,7 @@ def create_interface():
                             gr.Markdown("#### Synthesizer B (Concise)")
                             gr.JSON(value=all_cards.get("synthesizer_agent_v2", {}))
 
-    with gr.Blocks(title="Agentic RAG System", css=CUSTOM_CSS, theme=gr.themes.Soft()) as interface:
+    with gr.Blocks(title="Agentic RAG System") as interface:
             gr.Markdown("""
             # 🤖 Agentic RAG System
             
@@ -1311,7 +1304,7 @@ def create_interface():
                     # CoT is enabled by default for A2A Chat
                     a2a_use_cot_state = gr.State(value=True)
                     
-                    a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat", type="tuples")
+                    a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat", type="messages")
                     with gr.Row():
                         a2a_msg = gr.Textbox(label="Your Message", scale=8, placeholder="Ask a question...")
                         a2a_clear_button = gr.Button("Clear", scale=1, variant="secondary")
@@ -1478,7 +1471,7 @@ def create_interface():
                             reasoning_strategy_responses,
                             reasoning_final_answer
                         ],
-                        api_name=False
+                        api_visibility="private"
                     ).then(
                         lambda: "",
                         outputs=reasoning_msg
@@ -1501,7 +1494,7 @@ def create_interface():
                             reasoning_strategy_responses,
                             reasoning_final_answer
                         ],
-                        api_name=False
+                        api_visibility="private"
                     ).then(
                         lambda: "",
                         outputs=reasoning_msg
@@ -1514,7 +1507,7 @@ def create_interface():
                             reasoning_strategy_responses,
                             reasoning_final_answer
                         ],
-                        api_name=False
+                        api_visibility="private"
                     )
 
                 # A2A Testing Tab
@@ -1667,8 +1660,7 @@ def create_interface():
                                 swap_scenario_btn = gr.Button("🔄 Simulate Researcher Swap")
                             
                             gr.Markdown("### 3. Execution Trace")
-                            # converted to Chatbot as requested to prevent overflow
-                            demo_log_output = gr.Chatbot(label="Task Trace", height=600, elem_id="a2a_trace_log", type="tuples")
+                            demo_log_output = gr.Chatbot(label="Task Trace", height=600, elem_id="a2a_trace_log", type="messages")
                             
                             # Hidden state to store current log (history)
                             demo_log_state = gr.State(value=[])
@@ -1688,15 +1680,15 @@ def create_interface():
                     # Generate a mock Task ID
                     task_id = f"a2a-demo-{int(time.time())}-{random.randint(1000, 9999)}"
                     
-                    # Helper for chat messages (tuples format: [user_msg, bot_msg])
+                    # Helper for assistant log messages in Gradio's messages format.
                     def msg(content):
                         # Log to stdout
                         print(f"[A2A Demo Trace] {content}")
-                        return [None, content]
+                        return {"role": "assistant", "content": content}
 
                     # Helper for user messages
                     def user_msg(content):
-                        return [content, None]
+                        return {"role": "user", "content": content}
 
                     new_history = list(current_history) if current_history else []
                     
@@ -1898,25 +1890,25 @@ Generative Adversarial Networks (GANs) are a class of machine learning framework
                 )
             
             # Event handlers
-            pdf_button.click(process_pdf, inputs=[pdf_file], outputs=[pdf_output], api_name=False)
-            url_button.click(process_url, inputs=[url_input], outputs=[url_output], api_name=False)
-            repo_button.click(process_repo, inputs=[repo_input], outputs=[repo_output], api_name=False)
+            pdf_button.click(process_pdf, inputs=[pdf_file], outputs=[pdf_output], api_visibility="private")
+            url_button.click(process_url, inputs=[url_input], outputs=[url_output], api_visibility="private")
+            repo_button.click(process_repo, inputs=[repo_input], outputs=[repo_output], api_visibility="private")
             
             # Model download event handler
-            download_button.click(download_model, inputs=[model_dropdown], outputs=[model_status], api_name=False)
+            download_button.click(download_model, inputs=[model_dropdown], outputs=[model_status], api_visibility="private")
             
             # Standard and CoT handlers removed
 
             
             # A2A Testing Event Handlers
-            health_button.click(test_a2a_health, outputs=[health_output], api_name=False)
-            agent_card_button.click(test_a2a_agent_card, outputs=[agent_card_output], api_name=False)
-            discover_button.click(test_a2a_agent_discover, inputs=[discover_capability], outputs=[discover_output], api_name=False)
-            a2a_query_button.click(test_a2a_document_query, inputs=[a2a_query, a2a_collection, a2a_use_cot], outputs=[a2a_query_output], api_name=False)
-            task_create_button.click(test_a2a_task_create, inputs=[task_type, task_params], outputs=[task_create_output], api_name=False)
-            task_status_button.click(test_a2a_task_status, inputs=[task_id_input], outputs=[task_status_output], api_name=False)
-            task_list_button.click(get_a2a_task_list, outputs=[task_dashboard_output], api_name=False)
-            task_refresh_button.click(refresh_a2a_tasks, outputs=[task_dashboard_output], api_name=False)
+            health_button.click(test_a2a_health, outputs=[health_output], api_visibility="private")
+            agent_card_button.click(test_a2a_agent_card, outputs=[agent_card_output], api_visibility="private")
+            discover_button.click(test_a2a_agent_discover, inputs=[discover_capability], outputs=[discover_output], api_visibility="private")
+            a2a_query_button.click(test_a2a_document_query, inputs=[a2a_query, a2a_collection, a2a_use_cot], outputs=[a2a_query_output], api_visibility="private")
+            task_create_button.click(test_a2a_task_create, inputs=[task_type, task_params], outputs=[task_create_output], api_visibility="private")
+            task_status_button.click(test_a2a_task_status, inputs=[task_id_input], outputs=[task_status_output], api_visibility="private")
+            task_list_button.click(get_a2a_task_list, outputs=[task_dashboard_output], api_visibility="private")
+            task_refresh_button.click(refresh_a2a_tasks, outputs=[task_dashboard_output], api_visibility="private")
             
             # Run all tests function
             def run_all_a2a_tests():
@@ -1975,14 +1967,14 @@ Generative Adversarial Networks (GANs) are a class of machine learning framework
                 
                 return "\n".join(results)
             
-            run_all_tests_button.click(run_all_a2a_tests, outputs=[all_tests_output], api_name=False)
+            run_all_tests_button.click(run_all_a2a_tests, outputs=[all_tests_output], api_visibility="private")
             
             # Individual test event handlers
-            individual_health_button.click(test_individual_health, outputs=[all_tests_output], api_name=False)
-            individual_card_button.click(test_individual_card, outputs=[all_tests_output], api_name=False)
-            individual_discover_button.click(test_individual_discover, outputs=[all_tests_output], api_name=False)
-            individual_query_button.click(test_individual_query, outputs=[all_tests_output], api_name=False)
-            individual_task_button.click(test_individual_task, outputs=[all_tests_output], api_name=False)
+            individual_health_button.click(test_individual_health, outputs=[all_tests_output], api_visibility="private")
+            individual_card_button.click(test_individual_card, outputs=[all_tests_output], api_visibility="private")
+            individual_discover_button.click(test_individual_discover, outputs=[all_tests_output], api_visibility="private")
+            individual_query_button.click(test_individual_query, outputs=[all_tests_output], api_visibility="private")
+            individual_task_button.click(test_individual_task, outputs=[all_tests_output], api_visibility="private")
             
             # A2A Chat Interface Event Handlers
             a2a_msg.submit(
@@ -1995,7 +1987,7 @@ Generative Adversarial Networks (GANs) are a class of machine learning framework
                     a2a_collection_dropdown
                 ],
                 outputs=[a2a_chatbot],
-                api_name=False
+                api_visibility="private"
             )
             a2a_send.click(
                 a2a_chat,
@@ -2007,9 +1999,9 @@ Generative Adversarial Networks (GANs) are a class of machine learning framework
                     a2a_collection_dropdown
                 ],
                 outputs=[a2a_chatbot],
-                api_name=False
+                api_visibility="private"
             )
-            a2a_clear_button.click(lambda: [], None, a2a_chatbot, queue=False, api_name=False)
+            a2a_clear_button.click(lambda: [], None, a2a_chatbot, queue=False, api_visibility="private")
             # a2a_status_button removed from Chat tab
             
             # Checkbox event listener removed
@@ -2042,7 +2034,9 @@ def main():
         server_name="0.0.0.0",
         server_port=7860,
         share=True,
-        inbrowser=True
+        inbrowser=True,
+        theme=gr.themes.Soft(),
+        css=CUSTOM_CSS
     )
 
 def download_model(model_type: str) -> str:
