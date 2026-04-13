@@ -288,6 +288,8 @@ def convert_to_tuples_format(history):
             else:
                 # Assistant message without preceding user message
                 tuples.append([None, content])
+        elif isinstance(item, str):
+            tuples.append([None, item])
         i += 1
     return tuples
 
@@ -1122,73 +1124,6 @@ CUSTOM_CSS = """
 
 def create_interface():
     """Create Gradio interface"""
-    # Workaround for Gradio schema parsing bug with additionalProperties
-    # This error occurs when Gradio tries to generate API info from function signatures
-    # We'll patch the get_api_info method to handle errors gracefully and prevent blocking
-    original_blocks_init = gr.Blocks.__init__
-    
-    def patched_blocks_init(self, *args, **kwargs):
-        """Patched Blocks.__init__ that adds defensive API info generation"""
-        try:
-            original_blocks_init(self, *args, **kwargs)
-        except Exception as e:
-            # If Blocks initialization fails, log but continue
-            print(f"Warning: Error during Blocks initialization: {type(e).__name__}: {str(e)}")
-            # Try to continue with minimal initialization
-            try:
-                original_blocks_init(self, *args, **kwargs)
-            except:
-                pass
-        
-        # Safely get the original get_api_info method
-        try:
-            original_get_api_info = self.get_api_info
-        except AttributeError:
-            # If get_api_info doesn't exist, create a dummy method
-            original_get_api_info = lambda: {}
-        
-        def safe_get_api_info():
-            """Safely get API info, never raising exceptions to prevent blocking"""
-            try:
-                api_info = original_get_api_info()
-                # Ensure we always return a dict, even if None
-                return api_info if isinstance(api_info, dict) else {}
-            except TypeError as e:
-                if "argument of type 'bool' is not iterable" in str(e) or "additionalProperties" in str(e):
-                    # Return empty API info to avoid crashing
-                    return {}
-                # Catch all TypeError and return empty dict
-                print(f"Warning: TypeError generating API info: {str(e)}")
-                return {}
-            except ValueError as e:
-                # Handle value errors during API generation
-                print(f"Warning: ValueError generating API info: {str(e)}")
-                return {}
-            except AttributeError as e:
-                # Handle attribute errors during API generation
-                print(f"Warning: AttributeError generating API info: {str(e)}")
-                return {}
-            except KeyError as e:
-                # Handle key errors during API generation
-                print(f"Warning: KeyError generating API info: {str(e)}")
-                return {}
-            except (ImportError, ModuleNotFoundError) as e:
-                # Handle import errors during API generation
-                print(f"Warning: Import error generating API info: {str(e)}")
-                return {}
-            except Exception as e:
-                # Catch all other errors and log but don't crash
-                print(f"Warning: Unexpected error generating API info: {type(e).__name__}: {str(e)}")
-                return {}
-        
-        # Safely assign the patched method
-        try:
-            self.get_api_info = safe_get_api_info
-        except Exception as e:
-            print(f"Warning: Could not patch get_api_info: {str(e)}")
-    
-    # Temporarily patch Blocks class
-    gr.Blocks.__init__ = patched_blocks_init
 
     # Helper function to render Agent Cards
     def render_agent_cards():
@@ -1232,9 +1167,8 @@ def create_interface():
                         with gr.Column():
                             gr.Markdown("#### Synthesizer B (Concise)")
                             gr.JSON(value=all_cards.get("synthesizer_agent_v2", {}))
-    
-    try:
-        with gr.Blocks(title="Agentic RAG System") as interface:
+
+    with gr.Blocks(title="Agentic RAG System", css=CUSTOM_CSS, theme=gr.themes.Soft()) as interface:
             gr.Markdown("""
             # 🤖 Agentic RAG System
             
@@ -1377,7 +1311,7 @@ def create_interface():
                     # CoT is enabled by default for A2A Chat
                     a2a_use_cot_state = gr.State(value=True)
                     
-                    a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat")
+                    a2a_chatbot = gr.Chatbot(height=400, label="A2A Chat", type="tuples")
                     with gr.Row():
                         a2a_msg = gr.Textbox(label="Your Message", scale=8, placeholder="Ask a question...")
                         a2a_clear_button = gr.Button("Clear", scale=1, variant="secondary")
@@ -1734,7 +1668,7 @@ def create_interface():
                             
                             gr.Markdown("### 3. Execution Trace")
                             # converted to Chatbot as requested to prevent overflow
-                            demo_log_output = gr.Chatbot(label="Task Trace", height=600, elem_id="a2a_trace_log")
+                            demo_log_output = gr.Chatbot(label="Task Trace", height=600, elem_id="a2a_trace_log", type="tuples")
                             
                             # Hidden state to store current log (history)
                             demo_log_state = gr.State(value=[])
@@ -2075,16 +2009,13 @@ Generative Adversarial Networks (GANs) are a class of machine learning framework
                 outputs=[a2a_chatbot],
                 api_name=False
             )
-            a2a_clear_button.click(lambda: None, None, a2a_chatbot, queue=False, api_name=False)
+            a2a_clear_button.click(lambda: [], None, a2a_chatbot, queue=False, api_name=False)
             # a2a_status_button removed from Chat tab
             
             # Checkbox event listener removed
 
             
             return interface
-    finally:
-        # Restore original Blocks.__init__
-        gr.Blocks.__init__ = original_blocks_init
 
 def main():
     # Check configuration
@@ -2111,9 +2042,7 @@ def main():
         server_name="0.0.0.0",
         server_port=7860,
         share=True,
-        inbrowser=True,
-        css=CUSTOM_CSS,
-        theme=gr.themes.Soft()
+        inbrowser=True
     )
 
 def download_model(model_type: str) -> str:

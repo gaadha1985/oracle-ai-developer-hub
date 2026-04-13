@@ -331,7 +331,11 @@ class A2AHandler:
                 # Query vector store for actual findings
                 try:
                     search_query = step if step else query
-                    vs_results = self.vector_store.query(search_query, n_results=3) if self.vector_store else []
+                    # OraDBVectorStore has no generic .query(); default to the PDF collection
+                    vs_results = (
+                        self.vector_store.query_pdf_collection(search_query, n_results=3)
+                        if self.vector_store else []
+                    )
                     findings = []
                     for doc in vs_results:
                         findings.append({

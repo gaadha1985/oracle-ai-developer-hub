@@ -290,16 +290,22 @@ class RAGReasoningEnsemble:
         """Retrieve relevant context from vector store."""
         if not self.vector_store:
             return None
-        collection_map = {
-            'PDF': 'pdf_collection',
-            'Web': 'web_collection',
-            'Repository': 'repo_collection',
-            'General': 'general_knowledge',
+        # Map UI collection label to the matching OraDBVectorStore/store method.
+        # OraDBVectorStore exposes query_pdf_collection, query_web_collection,
+        # query_general_collection, query_repo_collection -- not a single .query().
+        method_map = {
+            'PDF': 'query_pdf_collection',
+            'Web': 'query_web_collection',
+            'Repository': 'query_repo_collection',
+            'General': 'query_general_collection',
         }
-        collection_name = collection_map.get(collection, 'pdf_collection')
+        method_name = method_map.get(collection, 'query_pdf_collection')
+        query_method = getattr(self.vector_store, method_name, None)
+        if query_method is None:
+            return None
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
-            None, lambda: self.vector_store.query(query, collection_name=collection_name, n_results=5)
+            None, lambda: query_method(query, n_results=5)
         )
         if not results:
             return None
