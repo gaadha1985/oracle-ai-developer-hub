@@ -113,7 +113,7 @@ class A2AHandler:
         if self._self_registered:
             return
         try:
-            from agent_card import get_agent_card
+            from .agent_card import get_agent_card
             card_data = get_agent_card()
             agent_card = AgentCard(**card_data)
             self.agent_registry.register_agent(agent_card)
@@ -394,7 +394,7 @@ class A2AHandler:
 
     async def handle_agent_card(self, params):
         '''Handle agent card requests'''
-        from agent_card import get_agent_card
+        from .agent_card import get_agent_card
         return get_agent_card()
 
     async def handle_reasoning_execute(self, params):
