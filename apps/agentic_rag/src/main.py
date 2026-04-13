@@ -78,7 +78,11 @@ app.add_middleware(
 )
 
 # Initialize components
-pdf_processor = PDFProcessor()
+try:
+    pdf_processor = PDFProcessor()
+except Exception as e:
+    print(f"⚠️ PDFProcessor init failed (Oracle DB unavailable): {e}")
+    pdf_processor = None
 
 # Initialize vector store (prefer Oracle DB if available)
 if ORACLE_DB_AVAILABLE:

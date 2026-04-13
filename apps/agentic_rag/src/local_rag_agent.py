@@ -303,7 +303,7 @@ class LocalRAGAgent:
 
         try:
             doc_id = metadata.get('document_id', 'a2a_upload') if metadata else 'a2a_upload'
-            chunks = [{'content': content, 'metadata': metadata or {}}]
+            chunks = [{'text': content, 'metadata': metadata or {}}]
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, lambda: add_method(chunks, doc_id))

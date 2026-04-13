@@ -10,12 +10,12 @@ import os
 import re
 import yaml
 from typing import Dict, Any, Optional
-from a2a_models import A2ARequest, A2AResponse, A2AError, TaskInfo, TaskStatus, DocumentQueryParams, DocumentUploadParams, TaskCreateParams, TaskStatusParams, AgentDiscoverParams, AgentCard, AgentCapability, AgentEndpoint
-from task_manager import TaskManager
-from agent_registry import AgentRegistry
-from specialized_agent_cards import get_all_specialized_agent_cards, get_agent_card_by_id
-from reasoning.rag_ensemble import RAGReasoningEnsemble
-from reasoning_agent_cards import get_all_reasoning_agent_cards, get_reasoning_agent_card_by_id
+from .a2a_models import A2ARequest, A2AResponse, A2AError, TaskInfo, TaskStatus, DocumentQueryParams, DocumentUploadParams, TaskCreateParams, TaskStatusParams, AgentDiscoverParams, AgentCard, AgentCapability, AgentEndpoint
+from .task_manager import TaskManager
+from .agent_registry import AgentRegistry
+from .specialized_agent_cards import get_all_specialized_agent_cards, get_agent_card_by_id
+from .reasoning.rag_ensemble import RAGReasoningEnsemble
+from .reasoning_agent_cards import get_all_reasoning_agent_cards, get_reasoning_agent_card_by_id
 logger = logging.getLogger(__name__)
 
 

@@ -34,13 +34,13 @@ try:
 except ImportError:
     INTERCEPTOR_AVAILABLE = False
 
-from openai_models import (
+from .openai_models import (
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChoice,
     ChatCompletionChunk, ChatCompletionChunkChoice, ChatMessage, DeltaContent,
     ModelList, ModelInfo, UsageInfo, ErrorResponse, ErrorDetail, ContentPart,
     FileAttachment, REASONING_MODELS, get_model_list, get_model_config
 )
-from web_processor import WebProcessor, is_url
+from .web_processor import WebProcessor, is_url
 
 router = APIRouter(prefix='/v1', tags=['OpenAI Compatible'])
 
