@@ -45,6 +45,12 @@ type AgentLoop struct {
 	running                   atomic.Bool
 	summarizing               sync.Map // Tracks which sessions are currently being summarized
 	channelManager            channelManagerInterface
+	streamCallback            providers.StreamCallback
+}
+
+// SetStreamCallback enables streaming output from the LLM provider.
+func (al *AgentLoop) SetStreamCallback(cb providers.StreamCallback) {
+	al.streamCallback = cb
 }
 
 // channelManagerInterface allows the agent loop to query enabled channels.
@@ -544,10 +550,14 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 		var err error
 		maxRetries := 3
 		for retry := 0; retry <= maxRetries; retry++ {
-			response, err = al.provider.Chat(ctx, messages, providerToolDefs, al.model, map[string]interface{}{
+			chatOpts := map[string]interface{}{
 				"max_tokens":  8192,
 				"temperature": 0.7,
-			})
+			}
+			if al.streamCallback != nil {
+				chatOpts["stream_callback"] = al.streamCallback
+			}
+			response, err = al.provider.Chat(ctx, messages, providerToolDefs, al.model, chatOpts)
 
 			if err == nil {
 				break
