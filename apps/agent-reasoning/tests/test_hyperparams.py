@@ -21,7 +21,7 @@ def test_agent_with_unknown_params_doesnt_crash():
         from agent_reasoning.agents.cot import CoTAgent
 
         try:
-            agent = CoTAgent(model="test", unknown_param=42, another_param="hello")
+            CoTAgent(model="test", unknown_param=42, another_param="hello")
         except TypeError:
             pytest.fail("Agent should accept unknown kwargs via BaseAgent.__init__ **kwargs")
 
@@ -32,7 +32,7 @@ def test_tot_agent_accepts_width_depth():
         from agent_reasoning.agents.tot import ToTAgent
 
         try:
-            agent = ToTAgent(model="test", width=3, depth=4)
+            ToTAgent(model="test", width=3, depth=4)
         except TypeError:
             pytest.fail("ToTAgent should accept width and depth via **kwargs")
 
@@ -43,7 +43,7 @@ def test_standard_agent_accepts_unknown_params():
         from agent_reasoning.agents.standard import StandardAgent
 
         try:
-            agent = StandardAgent(model="test", some_future_param=True)
+            StandardAgent(model="test", some_future_param=True)
         except TypeError:
             pytest.fail(
                 "StandardAgent should accept unknown kwargs via BaseAgent.__init__ **kwargs"

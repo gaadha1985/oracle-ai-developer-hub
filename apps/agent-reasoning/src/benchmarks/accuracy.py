@@ -937,7 +937,7 @@ def load_hf_arc(n: int = 100, seed: int = 42) -> List[AccuracyQuestion]:
     questions = []
     for idx, row in zip(indices, ds):
         choices_list = row["choices"]["text"]
-        labels = row["choices"]["label"]
+        row["choices"]["label"]
         # Normalize answerKey: some use "1","2","3","4" instead of "A","B","C","D"
         answer_key = row["answerKey"]
         if answer_key.isdigit():
