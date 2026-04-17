@@ -384,6 +384,7 @@ func migrateHelp() {
 func agentCmd() {
 	message := ""
 	sessionKey := "cli:default"
+	streamEnabled := false
 
 	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
@@ -391,6 +392,8 @@ func agentCmd() {
 		case "--debug", "-d":
 			logger.SetLevel(logger.DEBUG)
 			fmt.Println("🔍 Debug mode enabled")
+		case "--stream", "-v", "--verbose":
+			streamEnabled = true
 		case "-m", "--message":
 			if i+1 < len(args) {
 				message = args[i+1]
@@ -435,6 +438,41 @@ func agentCmd() {
 		agentLoop = agent.NewAgentLoop(cfg, msgBus, provider)
 	}
 
+	// Set up streaming callback
+	inReasoning := false
+	if streamEnabled {
+		agentLoop.SetStreamCallback(func(chunk providers.StreamChunk) {
+			if chunk.ReasoningContent != "" {
+				if !inReasoning {
+					fmt.Print("\033[2m💭 ") // dim color for thinking
+					inReasoning = true
+				}
+				fmt.Print(chunk.ReasoningContent)
+			}
+			if chunk.Content != "" {
+				if inReasoning {
+					fmt.Print("\033[0m\n") // reset color, newline
+					inReasoning = false
+				}
+				fmt.Print(chunk.Content)
+			}
+			if chunk.ToolCallName != "" {
+				if inReasoning {
+					fmt.Print("\033[0m\n")
+					inReasoning = false
+				}
+				fmt.Printf("\n\033[33m🔧 Calling tool: %s\033[0m", chunk.ToolCallName)
+			}
+			if chunk.Done {
+				if inReasoning {
+					fmt.Print("\033[0m")
+					inReasoning = false
+				}
+				fmt.Println()
+			}
+		})
+	}
+
 	// Print agent startup info (only for interactive mode)
 	startupInfo := agentLoop.GetStartupInfo()
 	logger.InfoCF("agent", "Agent initialized",
@@ -451,7 +489,11 @@ func agentCmd() {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("\n%s %s\n", logo, response)
+		if !streamEnabled {
+			fmt.Printf("\n%s %s\n", logo, response)
+		} else {
+			fmt.Printf("\n%s Done.\n", logo)
+		}
 	} else {
 		fmt.Printf("%s Interactive mode (Ctrl+C to exit)\n\n", logo)
 		interactiveMode(agentLoop, sessionKey)
