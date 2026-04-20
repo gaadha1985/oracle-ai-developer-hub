@@ -215,3 +215,8 @@ apps/agent-reasoning/benchmarks/results/
 # Notebook-specific
 notebooks/episodic
 notebooks/config.yaml
+
+# TanStack shoe store app: do not apply Python `lib/` or IDE `.vscode/` ignores to this Node app
+!apps/tanstack-shoe-store/src/lib/
+!apps/tanstack-shoe-store/src/lib/**
+!apps/tanstack-shoe-store/.vscode/
