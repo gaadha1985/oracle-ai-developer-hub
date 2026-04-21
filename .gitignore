@@ -163,8 +163,6 @@ apps/agentic_rag/chunks.json
 apps/agentic_rag/embeddings/
 apps/agentic_rag/kubectl
 
-
-
 # avoid terraform lock files
 *.lock.hcl
 *.lock
