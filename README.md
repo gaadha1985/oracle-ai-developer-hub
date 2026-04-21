@@ -16,6 +16,7 @@ Applications and reference implementations demonstrating how to build AI-powered
 | agentic_rag              | Intelligent RAG system with multi-agent Chain of Thought (CoT), PDF/Web/Repo processing, and Oracle AI Database 26ai integration | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/agentic_rag)              |
 | finance-ai-agent-demo    | Financial services AI agent with Oracle AI Database as a unified memory core for vector, graph, spatial, and relational queries  | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/finance-ai-agent-demo)    |
 | oci-generative-ai-jet-ui | Full-stack AI application with Oracle JET UI, OCI Generative AI integration, Kubernetes deployment, and Terraform infrastructure | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/oci-generative-ai-jet-ui) |
+| tanstack-shoe-store      | AI chat app using TanStack Start and Oracle 26ai Select AI to query a shoe store database with natural language                    | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/tanstack-shoe-store)      |
 
 ### 📓 **Notebooks** (`/notebooks`)
 
