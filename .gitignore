@@ -177,6 +177,7 @@ findings.md
 progress.md
 apps/agentic_rag/.serena/
 apps/agentic_rag/.webui_secret_key
+apps/agentic_rag/cot_chat_debug.json
 
 # Plan files in agentic_rag
 apps/agentic_rag/docs/plans/
@@ -187,6 +188,10 @@ apps/agentic_rag/frontend/docs/plans/
 .serena/
 **/.mcp.json
 .claude/
+.omc/
+.agents/
+.crush/
+.openhands/
 .cursorrules
 .cursorignore
 .cursorindexingignore
