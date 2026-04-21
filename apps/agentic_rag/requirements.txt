@@ -11,7 +11,7 @@ python-multipart
 torch
 pyyaml
 trafilatura
-gradio>=5.0,<6.0
+gradio>=6.7.0,<7.0
 open-webui
 lxml_html_clean
 langchain
