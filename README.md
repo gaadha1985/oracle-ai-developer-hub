@@ -16,7 +16,7 @@ Applications and reference implementations demonstrating how to build AI-powered
 | agentic_rag              | Intelligent RAG system with multi-agent Chain of Thought (CoT), PDF/Web/Repo processing, and Oracle AI Database 26ai integration | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/agentic_rag)              |
 | finance-ai-agent-demo    | Financial services AI agent with Oracle AI Database as a unified memory core for vector, graph, spatial, and relational queries  | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/finance-ai-agent-demo)    |
 | oci-generative-ai-jet-ui | Full-stack AI application with Oracle JET UI, OCI Generative AI integration, Kubernetes deployment, and Terraform infrastructure | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/oci-generative-ai-jet-ui) |
-| tanstack-shoe-store      | AI chat app using TanStack Start and Oracle 26ai Select AI to query a shoe store database with natural language                    | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/tanstack-shoe-store)      |
+| tanstack-shoe-store      | AI chat app using TanStack Start and Oracle 26ai Select AI to query a shoe store database with natural language                  | [![View App](https://img.shields.io/badge/View%20App-blue?style=flat-square)](./apps/tanstack-shoe-store)      |
 
 ### 📓 **Notebooks** (`/notebooks`)
 
@@ -50,16 +50,15 @@ Comprehensive documentation, reference materials, and conference presentations c
 
 ### 🎓 **Workshops** (`/workshops`)
 
-Hands-on workshops and guided learning experiences:
+Hands-on workshops and guided learning experiences that take developers from fundamentals to production patterns with Oracle AI Database. Each workshop is self-contained with a student notebook (TODO gaps to fill in), a complete reference notebook, step-by-step part guides, and a ready-to-run Codespaces / devcontainer environment with Oracle AI Database pre-configured. Workshops progress from information retrieval and RAG, through agentic systems and orchestration, to memory-augmented agents — together they cover the full stack for building AI applications on Oracle.
 
-- Step-by-step tutorials for building AI applications
-- End-to-end project walkthroughs
-- Best practices and architectural patterns
-- Integration guides for Oracle AI Database and OCI services
+> **Pull a single workshop without cloning the whole hub** — each workshop README includes `git sparse-checkout` instructions so you can fetch only the folder you need.
 
-| Name          | Description                  | Link |
-| ------------- | ---------------------------- | ---- |
-| _Coming soon_ | Workshops will be added here | -    |
+| Name                         | Description                                                                                                                                                                   | Stack                                                                                  | Link                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Information Retrieval to RAG | Build a Research Paper Assistant over 200 ArXiv papers by implementing five retrieval strategies (keyword, vector, hybrid, graph) and a full RAG pipeline wired to OCI GenAI. | Oracle AI Database, sentence-transformers, oracledb, OCI GenAI (xAI Grok 3 Fast)       | [![View Workshop](https://img.shields.io/badge/View%20Workshop-purple?style=flat-square)](./workshops/information_retrieval_to_RAG) |
+| From RAG to Agents           | Extend the RAG pipeline into a multi-agent system — wrap retrieval as agent tools, compose orchestration, and add persistent session memory backed by Oracle.                 | Oracle AI Database, sentence-transformers, oracledb, OpenAI API (GPT-5), openai-agents | [![View Workshop](https://img.shields.io/badge/View%20Workshop-purple?style=flat-square)](./workshops/from_rag_to_agents_workshop)  |
+| Agent Memory                 | Build memory-aware agents: implement a `MemoryManager` with six memory types in Oracle, apply context-engineering techniques, and compare agent runs with and without memory. | Oracle AI Database, langchain-oracledb, sentence-transformers, OCI GenAI, Tavily       | [![View Workshop](https://img.shields.io/badge/View%20Workshop-purple?style=flat-square)](./workshops/agent_memory_workshop)        |
 
 ### 🤝 **Partners** (`/partners`)
 
