@@ -25,6 +25,7 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
         exclude: '(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|go\.sum|poetry\.lock|Cargo\.lock)$'
 
   # ── Custom local hooks ────────────────────────────────────────
