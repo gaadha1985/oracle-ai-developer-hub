@@ -30,7 +30,7 @@ Run the questions from `shared/interview.md`. For beginner specifically:
 - Q4 (Inference) — Ollama. Confirm:
   - chat model: `llama3.1:8b` (default) or `qwen2.5:7b` (with thinking-mode mitigations from `ollama-local.md`).
   - embed model: `nomic-embed-text` (always; 768 dims).
-- Q5 (Topic) — pick one of the five from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to idea 5 (smoke-only) and tell the user why.
+- Q5 (Topic) — pick one of the eight from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to idea 5 (smoke-only) and tell the user why.
 - Q6 (Notebook) — default **no**. Beginner projects don't get notebooks unless the user explicitly asks.
 
 Print the confirmation block from `interview.md`. Do not proceed without an explicit `y`.

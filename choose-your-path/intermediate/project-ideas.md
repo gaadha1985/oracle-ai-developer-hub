@@ -1,6 +1,6 @@
 # Intermediate — project ideas
 
-Five RAG-shaped projects. Each lands a working chatbot with a UI, persistent chat history, and hybrid retrieval — all on Oracle. The user has built RAG before (probably with FAISS or Chroma); this is them rebuilding it on Oracle and OCI GenAI.
+Eight RAG-shaped projects. Each lands a working chatbot with a UI, persistent chat history, and hybrid retrieval — all on Oracle. The user has built RAG before (probably with FAISS or Chroma); this is them rebuilding it on Oracle and OCI GenAI.
 
 The skill asks the user to pick one. Free-text pitches get mapped to the closest. If nothing maps well, the skill picks idea 1 (PDF-RAG) as the safest default.
 
@@ -95,9 +95,54 @@ The skill asks the user to pick one. Free-text pitches get mapped to the closest
 - Agent that *writes* to a vector store, not just reads.
 - Persistent chat history.
 
-**Shape.** ~800 lines. The most ambitious of the five.
+**Shape.** ~800 lines. The most ambitious of the original five.
 
 **Demo.** Show how asking a question once and asking it again three days later surfaces the prior conversation as context.
+
+---
+
+## 6. Meeting transcript assistant
+
+**Pitch.** Drop Zoom / Otter / Teams transcripts. Chat "what did Sarah say about the migration?"; get a quote plus the timestamp to jump to.
+
+**LangChain primitives forced.**
+- Speaker-attribution metadata (`{"speaker": ..., "timestamp": ..., "meeting_id": ...}`).
+- Retriever with `filter={"speaker": "sarah@..."}` — the user picks a speaker in the UI to scope retrieval.
+- `EnsembleRetriever`: vector for "what was discussed" + BM25 for "who said the literal phrase 'must ship by Friday'".
+
+**Shape.** Same skeleton as PDF-RAG. ~700 lines.
+
+**Demo.** Ingest a 1h transcript. Filter to one speaker. Ask "what's their position on X?" → quoted answer with timestamp.
+
+---
+
+## 7. GitHub issue triage chat
+
+**Pitch.** Export a repo's issues (via `gh issue list --json`) and chat across them. "What bugs did we close last sprint? What's still open in the auth area?"
+
+**LangChain primitives forced.**
+- Heavy categorical metadata filtering (`{"status": ..., "labels": [...], "milestone": ..., "created": ...}`).
+- The metadata-as-string monkeypatch — categorical filters fail silently without it.
+- Date-range filter pattern: `filter={"closed_after": "2026-03-01"}` then post-filter; demonstrates a real limitation of vector filters and how to work around it.
+
+**Shape.** ~700 lines.
+
+**Demo.** Ingest issues from a public repo (e.g. `langchain-oracledb`). Chat: "summarize all closed bugs labelled 'docs' in the last 30 days." Get a real list with links.
+
+---
+
+## 8. Newsletter / RSS digest chatbot
+
+**Pitch.** Paste exports from Substack, Pocket, or any RSS reader. Chat about what you've been reading. "What did Stratechery say about AI hardware in Q1?"
+
+**LangChain primitives forced.**
+- Author + date faceting at retrieval (`{"author": ..., "published": ..., "feed": ...}`).
+- Per-topic chat threading: `RunnableWithMessageHistory` keyed by topic ID rather than user — showing that the history table can index whatever scope you want.
+- A second collection (`SUMMARIES`) where each finished chat thread writes back a short summary. Future questions retrieve from both raw articles *and* prior summaries — the precursor pattern to advanced-tier "second brain" agents.
+
+**Shape.** ~750 lines.
+
+**Demo.** Ingest one author's last year of posts. Ask three follow-up questions. Restart, ask a related question, watch the prior thread's summary surface as context.
 
 ---
 

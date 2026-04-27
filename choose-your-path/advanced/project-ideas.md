@@ -1,6 +1,6 @@
 # Advanced — project ideas
 
-Five projects where Oracle AI DB is the **only** state store. The advanced skill *refuses* to scaffold Redis, Postgres, SQLite, ChromaDB, FAISS, Qdrant, Pinecone, or filesystem state — that constraint is the whole point.
+Eight projects where Oracle AI DB is the **only** state store. The advanced skill *refuses* to scaffold Redis, Postgres, SQLite, ChromaDB, FAISS, Qdrant, Pinecone, or filesystem state — that constraint is the whole point.
 
 The user has built agents before. They know what episodic memory is. The skill picks one of these (or accepts a custom pitch that fits the constraint) and builds it real.
 
@@ -81,6 +81,61 @@ This idea is also a *recruiting tool*: it's how someone with a popular agent dem
 **Shape.** Variable. The skill scaffolds an outline based on the user's 3 picks, citing the reference docs for each, and the Gradio app has a tab per feature.
 
 **~2000-2500 lines. Notebook mandatory.**
+
+---
+
+## 6. Personal CRM agent
+
+**Pitch.** Log every interaction with people you know (calls, emails, meetings, DMs). Before any new interaction, ask the agent "what's the state of my relationship with X?" — get a brief that pulls from entity memory, recent threads, open asks, and shared context with mutual contacts.
+
+**Features used.** **Entity memory (the headline)** · Property graph (Person ↔ shared-meeting ↔ Person) · Vector search.
+
+**Shape.**
+- Entity table: one row per person with embedding of concatenated past interactions, plus structured fields (`open_asks`, `last_seen`, `relationship_type`).
+- Graph: people connected by meetings/emails they were both in (Python BFS to find warm intros).
+- Agent loop on "prep for meeting with X": retrieve entity memory + recent threads with X + 1-hop graph neighbors who've talked about similar topics → produce a one-page brief.
+- Notebook + Gradio: log five fictional interactions, then run the meeting prep on each. Watch the brief get richer over time.
+
+**~1900 lines. Notebook mandatory.**
+
+This is the entity-memory showcase the way idea 2 is the JSON-duality showcase.
+
+---
+
+## 7. Long-running project copilot (workflow memory)
+
+**Pitch.** Drives a multi-week project — writing a book, building a side project, planning a wedding. The agent persists project state (chapters, milestones, blockers, decisions) across sessions, so every "good morning" picks up exactly where you left off.
+
+**Features used.** **Workflow memory (the headline)** · Summary memory · Vector search.
+
+**Shape.**
+- Workflow table: one row per active project with a JSON CLOB holding the full state machine (current phase, completed milestones, open blockers, last decision, next action).
+- Summary memory: at the end of each session, agent writes a 3-sentence "where we're at" summary; each new session retrieves the latest one before doing anything else.
+- Agent loop: every turn — read workflow row, plan next move, execute (write a paragraph, refine an outline, add a TODO), update workflow row in the same transaction.
+- Notebook + Gradio: simulate a 5-day project arc. Show the workflow row mutating; show how kill/restart preserves everything.
+
+**~1700 lines. Notebook mandatory.**
+
+This is the workflow-memory showcase. It also doubles as a real-world template for any agent that runs *over time* rather than per-session.
+
+---
+
+## 8. API integration scout (toolbox + execution-log showcase)
+
+**Pitch.** Agent reads an OpenAPI spec or MCP server descriptor, registers each endpoint as a tool in its `toolbox_memory`, then chains tool calls to fulfil user goals ("get me London's weather, translate it to Japanese, save the result"). Every call is logged with inputs/outputs/latency in `tool_execution_log`.
+
+**Features used.** **Toolbox memory + tool execution log (the headline)** · Vector search · Episodic memory.
+
+**Shape.**
+- Toolbox table: one row per tool, with name + JSON schema + provenance (which spec it came from).
+- Execution log table: one row per tool call (run_id, tool, args JSON, result JSON, latency, status).
+- Agent loop: parse user goal → vector-search the toolbox for matching tools → plan a chain → execute each → log → return.
+- Vector-search the execution log: "have I called something like this before?" — past calls become few-shot examples for the planner.
+- Notebook + Gradio: register two real tools (e.g. `wttr.in` for weather + a free translate API). Show the agent chain three calls in one turn; show the execution log fill up; demonstrate the planner reusing a past chain.
+
+**~2100 lines. Notebook mandatory.**
+
+This is the toolbox-memory showcase. It's also the most "agentic" of the eight — closest to AutoGPT/SmolAgents in shape, but with full Oracle backing.
 
 ---
 

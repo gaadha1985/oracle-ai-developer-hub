@@ -30,7 +30,7 @@ Run `shared/interview.md`. For intermediate specifically:
   - **OCI GenAI (Grok 4 / Cohere embeddings)** — recommended.
   - Ollama (local) — fallback when the user lacks an OCI tenancy.
   - BYO OpenAI-compat — only if asked.
-- Q5 (Topic) — one of the five ideas; map free-text pitches.
+- Q5 (Topic) — one of the eight ideas; map free-text pitches.
 - Q6 (Notebook) — default **yes**.
 
 When the user picks OCI:
