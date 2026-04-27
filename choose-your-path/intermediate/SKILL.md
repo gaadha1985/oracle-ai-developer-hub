@@ -1,142 +1,170 @@
 ---
 name: choose-your-path-intermediate
-description: Scaffold a real RAG chatbot on Oracle 26ai Free + langchain-oracledb (multi-collection, persistent chat history, hybrid retrieval) + OCI Generative AI or Ollama + Gradio UI. For users who've built RAG before and want to rebuild it on Oracle.
+description: Scaffold a Grok-4 tool-calling agent over an Oracle schema using langchain-oracledb + oracle-database-mcp-server + in-DB ONNX embeddings (registered MiniLM model, no external embedding API) + Open WebUI. For users who've built RAG before and want to rebuild it on the production-feeling Oracle stack.
 inputs:
   - target_dir: where to scaffold (default ~/git/personal/<slug>)
   - topic: optional; one of intermediate/project-ideas.md, or a free-text pitch
 ---
 
-The user picked the **intermediate** path. They've built RAG before. Don't over-explain; do drop them on the rails of `langchain-oracledb` + OCI GenAI + Oracle 26ai Free.
+The user picked the **intermediate** path. They've built RAG and chatbots before. Your job is to introduce them to **two** new ideas at once: **(a)** an LLM agent that calls live SQL via `oracle-database-mcp-server`, and **(b)** embeddings that happen *inside the database* via a registered ONNX model. The stack is production-shaped: OCI GenAI Grok 4, in-DB ONNX, Open WebUI. No Ollama, no external embedding API.
 
 ## Step 0 — Read these references first
 
 - `shared/references/sources.md`
 - `shared/references/oracle-26ai-free-docker.md`
-- `shared/references/langchain-oracledb.md` ← the centerpiece
-- `shared/references/oci-genai-openai.md`
-- `shared/references/ollama-local.md` (in case the user picks Ollama or wants a fallback embedder)
+- `shared/references/langchain-oracledb.md`
+- `shared/references/oci-genai-openai.md`  ← Pattern 1 SigV1 auth
+- `shared/references/onnx-in-db-embeddings.md`  ← load-bearing for embeddings
 - `shared/references/oracledb-python.md`
 - `shared/references/ai-vector-search.md`
-- `shared/references/hybrid-search.md`
+- `shared/references/hybrid-search.md` (idea 3 specifically)
 - `shared/references/exemplars.md`
 - `intermediate/project-ideas.md`
+- `skills/oracle-aidb-docker-setup/SKILL.md`
+- `skills/langchain-oracledb-helper/SKILL.md`
+- `skills/oracle-mcp-server-helper/SKILL.md`
 
 ## Step 1 — Interview
 
 Run `shared/interview.md`. For intermediate specifically:
 
-- Q3 (DB target) — default to "Local Docker" but allow "already-running container" if the user says so.
-- Q4 (Inference) — surface all three options. Defaults the skill should suggest:
-  - **OCI GenAI (Grok 4 / Cohere embeddings)** — recommended.
-  - Ollama (local) — fallback when the user lacks an OCI tenancy.
-  - BYO OpenAI-compat — only if asked.
-- Q5 (Topic) — one of the eight ideas; map free-text pitches.
-- Q6 (Notebook) — default **yes**.
-
-When the user picks OCI:
-- Confirm region. If they pick `grok-4` and aren't in `us-chicago-1`, warn and offer Cohere or Llama as a same-region alternative (per `oci-genai-openai.md`).
-- Check `~/.oci/config` exists; if not, point them at `oci setup config` and stop.
-- Confirm `OCI_COMPARTMENT_ID` is available (env or interview answer).
-- **Auth pattern.** OCI's OpenAI-compat endpoint requires Signature V1 — bare `langchain_openai.ChatOpenAI(api_key=...)` returns 401. The skill scaffolds Pattern 1 from `oci-genai-openai.md` (`oci-openai` SDK with `oci.signer.Signer`) by default and mentions the bearer-token Pattern 2 only if the user explicitly says their tenancy supports it.
+- **Q3 (DB target)** — default to local Docker. Allow "already-running container" if user says so.
+- **Q4 (Inference)** — *not optional at this tier*. **OCI GenAI** for the LLM (`grok-4` in `us-chicago-1`, Pattern 1 SigV1). **In-DB ONNX** for embeddings. Confirm:
+  - `~/.oci/config` exists; if not, stop and point at `oci setup config`.
+  - `OCI_COMPARTMENT_ID` available.
+  - Region warning if not `us-chicago-1`; offer Cohere or Llama as same-region fallback per `oci-genai-openai.md`.
+  - **In-DB ONNX model:** default = `sentence-transformers/all-MiniLM-L6-v2`, registered as `MY_MINILM_V1` (384 dim). The user does *not* need to download this themselves — the skill scaffolds the export-and-register pipeline (steps 1-3 in `onnx-in-db-embeddings.md`).
+- **Q5 (Topic)** — one of the three from `intermediate/project-ideas.md`. Map free-text pitches; default to idea 1 (NL2SQL).
+- **Q6 (Notebook)** — default **yes**.
+- **Q7 (intermediate-only) — sql_mode for MCP?** — `read_only` (default — covers all three idea shapes safely) or `read_write`. Idea 1 and idea 2 are read-only. Idea 3 can be either. Capture an explicit `y` if `read_write` selected.
 
 Print confirmation block. Wait for `y`.
 
 ## Step 2 — Resolve choices
 
-Spec dict:
-
-| Variable | Source |
+| Variable | Value |
 | --- | --- |
 | `project_slug` | derived from topic |
-| `embedder_pkg` / `embedder_init` / `embedding_dim` | OCI: Cohere wrapper / 1024; Ollama: `OllamaEmbeddings(model="nomic-embed-text")` / 768 |
-| `llm_pkg` / `llm_init` | OCI: `ChatOpenAI` with OCI base_url; Ollama: `ChatOllama(model=...)` |
-| `collections` | per-idea: PDF-RAG → one per file + `CONVERSATIONS`; Codebase → one + `CONVERSATIONS`; etc. |
-| `ui_stack` | `gradio` |
-| `notebook` | yes by default |
-| `qwen_mitigations` | only if user picked an Ollama Qwen chat model |
-
-Validate **embedding-dim consistency** in `verify.py`'s round-trip step — not before scaffolding (deps aren't installed yet at scaffold-time, so calling `embedder.embed_query()` would fail). The skill records the expected `embedding_dim` (768 for nomic, 1024 for Cohere) into a constant in `store.py`; verify.py calls `embedder.embed_query("dim check")` once and asserts `len(...) == EXPECTED_DIM`. If verify reports a mismatch, drop the table and re-bootstrap with the correct embedder per `langchain-oracledb.md`.
+| `package_slug` | snake_case |
+| `embedder` | `in-db-onnx` |
+| `embedding_dim` | 384 |
+| `onnx_model_local_id` | `sentence-transformers/all-MiniLM-L6-v2` |
+| `onnx_model_db_name` | `MY_MINILM_V1` |
+| `llm_model` | `grok-4` (or chosen fallback) |
+| `oci_base_url` | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai` |
+| `collections` | per-idea: idea 1 → `["CONVERSATIONS"]` only; idea 2 → `["SCHEMA_DOCS_DOCUMENTS", "CONVERSATIONS"]`; idea 3 → `["INVOICES_DOCS", "CONVERSATIONS"]` |
+| `mcp_sql_mode` | `read_only` (default) |
+| `mcp_allowed_tools` | per-idea (see below) |
+| `notebook` | yes |
 
 ## Step 3 — Scaffold
 
-Create files in this order. Cite exemplars in headers.
+Order matters: building-block skills first, then project code.
 
-1. `target_dir/` — refuse if non-empty.
-2. `.gitignore` — `.env`, `__pycache__/`, `.venv/`, `*.pyc`, `data/` (where the user puts their PDFs / repos / etc.).
-3. `docker-compose.yml` — from template.
-4. `.env.example` + `.env` — keep both Ollama + OCI sections, comment out the unused one. Generate `ORACLE_PWD`.
-5. `pyproject.toml` — from template, with deps:
-   - Always: `oracledb>=2.4`, `langchain-oracledb>=0.1`, `langchain>=0.3`, `gradio>=4.0`, `python-dotenv>=1.0`, `pydantic>=2`.
-   - OCI: `oci>=2.130`, `langchain-openai>=0.2`.
-   - Ollama: `langchain-ollama>=0.2`.
-   - Per-idea: PDF-RAG → `pypdf`, `unstructured`; Web → `trafilatura`, `httpx`; Codebase → `tree-sitter` (or `pygments` for v1 simpler chunking).
-6. `src/<package>/__init__.py`
-7. `src/<package>/store.py` — multi-collection wrapper.
-   - Cite `apps/agentic_rag/src/OraDBVectorStore.py:1-100` at top.
-   - Class `ProjectStore` exposing `add(kind, texts, metadatas)`, `search(kind, query, k, filter)`, `as_retriever(kind, **kwargs)`.
-   - **Always include the metadata-as-string monkeypatch** (verbatim from `langchain-oracledb.md`).
-   - Naming convention `<PROJECT_SLUG>_<KIND>` enforced.
-8. `src/<package>/inference.py` — embedder + LLM init. One factory per backend (OCI / Ollama / BYO). The factory checks env vars on import and raises a clear error if unset.
-   - For OCI embeddings: write the LangChain `Embeddings` subclass that wraps `GenerativeAiInferenceClient.embed_text` per `oci-genai-openai.md`. Filter empties, batch by 96, cache the client.
-9. `src/<package>/history.py` — persistent chat history.
-   - `langchain-oracledb` does NOT ship a chat-history class. Scaffold the small `OracleChatHistory(BaseChatMessageHistory)` subclass from `langchain-oracledb.md` § "Persistent chat history" verbatim (~30 lines, backs onto a `chat_history` table in Oracle).
-   - Run the table DDL once during bootstrap (in `store.py` or a `migrations/` SQL file).
-   - Wrap with `RunnableWithMessageHistory(chain, lambda sid: OracleChatHistory(conn, sid), input_messages_key="question", history_messages_key="history")`. Expose as `with_history(chain)`.
-   - Do NOT `from langchain_oracledb.chat_message_histories import ...` — it doesn't exist.
-10. `src/<package>/retrieval.py` — hybrid retriever.
-    - Default = `EnsembleRetriever([vector, BM25])` per `hybrid-search.md` Pattern A.
-    - Add a `pure_vector_retriever()` for the user to swap in if BM25 memory is a concern.
-11. `src/<package>/ingest.py` — per-idea ingestion script. Chunking strategy hard-coded per idea (PDFs by page, repos by file or symbol, web pages with trafilatura, slack by message-thread, markdown by H2).
-12. `src/<package>/chains.py` — the RAG chain. LCEL, taking `retriever` and `llm`, returning `RunnableWithMessageHistory`.
-13. `src/<package>/app.py` — Gradio UI. Single-page chat with file upload (where applicable). Hooks the chain to `gr.ChatInterface`.
-14. `gradio_app.py` (root) — thin entrypoint: `from <package>.app import demo; demo.launch()`.
-15. `verify.py` — from template; `inference_enabled = True`. Round-trip check uses the chosen embedder + LLM. The vector smoke uses a non-conflicting table (`CYP_VERIFY_SMOKE`).
-16. `notebook.ipynb` — copy `shared/templates/notebook.template.ipynb` if present, otherwise generate a 6-cell notebook:
-    1. Setup (load .env, smoke `verify`).
-    2. Ingest a tiny corpus.
-    3. One vector search.
-    4. One retrieved-augmented question.
-    5. Show conversation history persistence.
-    6. "Now run `python gradio_app.py` to use the UI."
-17. `README.md` — from template. Fill all placeholders. Include the screenshot slot for the Gradio UI.
+### 3a — Foundation via building-block skills
+
+1. Refuse if `target_dir` is non-empty.
+2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
+3. Append the **Open WebUI** service to the generated `docker-compose.yml` (same as beginner SKILL step 3a-3).
+4. **Run the ONNX export + register pipeline** *before* invoking the langchain helper, since the helper's dim assertion needs the model registered:
+   - Copy `~/git/personal/onnx2oracle/src/onnx2oracle/pipeline.py` to `target_dir/scripts/onnx_export.py` (with attribution at top).
+   - Copy `~/git/personal/onnx2oracle/src/onnx2oracle/loader.py` to `target_dir/scripts/onnx_load.py`.
+   - Run them once: `python scripts/onnx_export.py` then `python scripts/onnx_load.py` — outputs `MY_MINILM_V1` registered in the DB.
+   - Smoke: `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual` returns a 384-vector. If not, stop and surface the loader error.
+5. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=in-db-onnx` (the helper writes the `InDBEmbeddings` subclass), `collections=...`, `has_chat_history=True`. Block until OK.
+6. **Invoke `skills/oracle-mcp-server-helper`.** Pass `target_dir`, `package_slug`, `sql_mode=...`, `allowed_tools=...`. Block until OK. Tool list per idea:
+   - Idea 1: `[list_tables, describe_table, run_sql]`
+   - Idea 2: `[list_tables, describe_table, describe_schema, run_sql, vector_search]`
+   - Idea 3: `[run_sql, vector_search]` (the agent doesn't need to discover tables — they're known)
+
+### 3b — Per-idea seeding
+
+7. **Idea 1 (NL2SQL with seeded fake data).** Generate `migrations/100_seed_dummy.sql` — 10 tables (customers, orders, products, employees, suppliers, invoices, payments, regions, categories, returns), populated via `Faker` from `scripts/seed_faker.py`. ~50K rows. Run during bootstrap.
+8. **Idea 2 (Schema doc Q&A).** Reuse the seed schema from idea 1 if the user wants; otherwise expect them to point at their real schema.
+9. **Idea 3 (Hybrid retrieval).** Generate `INVOICE_PDFS/` folder via `scripts/seed_invoice_pdfs.py` (uses `reportlab` to make 20 fake invoice PDFs). Run `ingest.py` once at bootstrap to embed them into `INVOICES_DOCS` via in-DB embeddings. Plus the seed schema from idea 1.
+
+### 3c — Project-specific code (the only files this skill writes itself)
+
+10. `target_dir/.gitignore` — extend with `data/`, `INVOICE_PDFS/`, `*.onnx`, `scripts/__pycache__/`.
+11. `target_dir/pyproject.toml` — extend deps:
+    - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-openai>=0.2`, `oci-openai>=0.1`, `oci>=2.130`, `optimum[onnxruntime]`, `onnxruntime>=1.18`, `onnxruntime-extensions`, `transformers`, `Faker>=24`, `python-multipart`.
+    - Idea 1: + (no extras).
+    - Idea 2: + (no extras).
+    - Idea 3: + `reportlab>=4`, `pypdf>=4`.
+12. `src/<package_slug>/inference.py` — Grok 4 chat client via `oci-openai` SDK + `oci.signer.Signer` (Pattern 1 from `oci-genai-openai.md`). Cite the exemplar.
+13. **Per-idea agent module:**
+    - **Idea 1** → `src/<package_slug>/agent.py`:
+      ```python
+      tools = get_tools()  # from tool_registry.py
+      llm = make_llm()  # Grok 4 via OCI
+      agent = create_tool_calling_agent(llm.bind_tools(tools), tools, prompt)
+      executor = AgentExecutor(agent=agent, tools=tools)
+      with_history = RunnableWithMessageHistory(executor, get_history_factory(...), ...)
+      ```
+      The prompt teaches Grok to: list_tables → describe_table → emit run_sql; return both the answer and the SQL it ran.
+    - **Idea 2** → `src/<package_slug>/generate.py` (one-shot script that walks the schema and INSERTs rows into `SCHEMA_DOCS_DOCUMENTS` with embeddings via `VECTOR_EMBEDDING(MY_MINILM_V1 USING :description)`) + `src/<package_slug>/agent.py` (RAG over the generated docs via `vector_search` MCP tool).
+    - **Idea 3** → `src/<package_slug>/agent.py` with a system prompt that explicitly teaches the agent the two-modality choice (vector for "find similar invoices to this PDF", run_sql for "sum unpaid amounts", both for "find unpaid invoices similar to X").
+14. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions` wrapping the agent (same shape as beginner; differences: handles tool-call streaming events from the agent executor, surfaces them as OpenAI-compatible "function_call" deltas).
+15. `verify.py` — fill template:
+    - Round-trip: `len(get_embedder().embed_query("dim check")) == 384`.
+    - Smoke: query the registered ONNX model directly via SQL.
+    - Smoke: list MCP tools — assert at least the per-idea allowed list is present.
+    - Smoke: a single chain call asking a simple question of the seeded data.
+16. `notebook.ipynb` — 8 cells:
+    1. Setup (load `.env`, smoke `verify`).
+    2. Show the registered ONNX model (`SELECT * FROM USER_MINING_MODELS WHERE MODEL_NAME='MY_MINILM_V1'`).
+    3. Show MCP tools list.
+    4. One direct `vector_search` MCP call.
+    5. One `run_sql` MCP call.
+    6. One full agent turn (idea-specific question).
+    7. Show the chat history table populated.
+    8. "Now run `python -m <pkg>.adapter` and open `http://localhost:3000`."
+17. `README.md` — fill placeholders. "Why Oracle" paragraph names: in-DB ONNX embeddings, AI Vector Search, oracle-database-mcp-server, JSON Duality (idea 3), persistent chat history. **Include the "Why in-DB embeddings?" callout from `intermediate/project-ideas.md`** verbatim — it's the load-bearing pitch.
 
 ## Step 4 — Verify
 
-1. `docker compose up -d --wait`.
-2. `python verify.py`. Expect `verify: OK (db, vector, inference)`.
-3. **Then** run an end-to-end smoke:
-   - For ideas 1, 2, 4, 5: ingest a tiny known corpus the skill includes (e.g. 3 lines of test text).
-   - Ask one question through the chain.
-   - Assert the answer references the known content.
-4. On verify failure, follow the `shared/verify.md` recovery loop.
+1. DB is up (skill 1).
+2. ONNX model registered (step 3a-4).
+3. From `target_dir`: `python -m pip install -e .`.
+4. `python verify.py`. Expect `verify: OK (db, vector, inference, mcp)`.
+5. Run notebook end-to-end: `jupyter nbconvert --to notebook --execute notebook.ipynb`. Must complete clean.
+6. Bring Open WebUI up. Boot adapter, hit `/v1/models`, kill it. Don't keep it running.
+7. On any failure, follow `shared/verify.md` recovery loop, max 3 retries.
 
 ## Step 5 — Polish for sharing
 
 1. README placeholders filled.
-2. Open `gradio_app.py` once (background) so the user sees it boot to `http://localhost:7860`. Don't keep it running — just confirm it starts.
+2. `docs/` — note: drop a 60s demo GIF showing tool-call traces.
 3. Final report:
    ```
    Done.
-     project at: <target_dir>
-     run with:   cd <target_dir> && python gradio_app.py
-     verify:     OK
-     notebook:   <target_dir>/notebook.ipynb
-     next:       record a 30s demo of the Gradio UI, fill the "What I built" section, push.
+     project at:    <target_dir>
+     features used: in-DB ONNX (MY_MINILM_V1), oracle-database-mcp-server, OracleVS, OracleChatHistory
+     run with:      cd <target_dir>
+                    docker compose up -d
+                    python -m <pkg>.adapter   # blocks; Open WebUI on :3000
+     verify:        OK
+     notebook:      <target_dir>/notebook.ipynb (executed clean)
+     ui:            http://localhost:3000
+     next:          record a 60s tool-call demo, push to GitHub.
    ```
 
 ## Stop conditions
 
 - OCI selected but `~/.oci/config` missing — stop, point at `oci setup config`.
-- User wants Grok 4 but isn't in `us-chicago-1` — stop unless they accept Cohere / Llama fallback.
-- Embedder dim doesn't match what the embedder *says* it returns — stop, surface the mismatch.
+- ONNX export fails (BertTokenizer model only — SentencePiece will fail). Surface error, stop.
+- ONNX model registers but its `embed_query` returns dim ≠ 384. Drop the model, surface error.
+- MCP server fails to initialize within 30s — stop and surface stderr.
+- `sql_mode=read_write` without explicit user `y`.
 - Verify fails 3 times.
-- Topic doesn't fit any idea well.
 
 ## What you must NOT do
 
-- Don't bypass the metadata-as-string monkeypatch. Filtered retrievals will silently break.
-- Don't write raw `VECTOR_DISTANCE` SQL when `OracleVS.similarity_search` covers it. Hybrid search is the only place SQL is allowed at this tier (Pattern A in `hybrid-search.md` keeps it out of view anyway).
-- Don't introduce non-Oracle vector stores anywhere — not even as "for comparison."
+- Don't bypass the metadata-as-string monkeypatch (`langchain-oracledb-helper` includes it; just don't remove the import).
+- Don't write raw `VECTOR_DISTANCE` SQL when `OracleVS.similarity_search` covers it.
+- Don't introduce non-Oracle vector stores anywhere.
+- Don't introduce Ollama as a fallback. OCI GenAI only at this tier.
+- Don't introduce Cohere embeddings as a fallback. In-DB ONNX is the contract — the whole pedagogical point is "no external embedder."
 - Don't pin a model that doesn't exist in the user's region without warning.
-- Don't ship without a notebook (intermediate default is yes — only skip if the user explicitly said no during interview).
-- Don't claim done before verify is green AND the e2e smoke passes.
+- Don't ship without the executed notebook.
+- Don't claim done before verify is green AND the notebook runs clean AND the adapter boots.

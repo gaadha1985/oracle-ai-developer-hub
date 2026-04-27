@@ -1,164 +1,133 @@
 # Beginner — project ideas
 
-Eight scoped ideas. Each is short (~80-200 lines), uses only `langchain-oracledb` + Ollama + Oracle 26ai Free in Docker, and has an obvious "did it work" demo.
+Three takes on the same skeleton: ingest a corpus → embed via OCI Cohere → store in `OracleVS` → chat about it in Open WebUI, powered by Grok 4 on OCI Generative AI. The user's job is to pick **what** they want to chat with. The skeleton is identical across all three.
 
-The skill asks the user to pick one. If they pitch their own, the skill maps it to the closest idea and confirms. If nothing maps, the skill falls back to idea 5 (smoke-only) rather than guessing a shape.
+> The skill maps free-text pitches to the closest of the three. If nothing maps, default to **idea 1 (PDFs)** — it's the most universal demo.
 
----
+## Stack (same for all three)
 
-## 1. Personal bookmarks search
+| Layer | Choice | Why |
+| --- | --- | --- |
+| DB | Oracle 26ai Free in Docker | Single command up; vector + relational + JSON in one place. |
+| Vector store | `langchain-oracledb` `OracleVS`, single collection | The library you came to learn. |
+| Embeddings | OCI GenAI — `cohere.embed-english-v3.0` (1024 dim) | Same tenancy as the LLM, no second backend. Multilingual variant available if the user asks. |
+| LLM | OCI GenAI — `grok-4` in `us-chicago-1` (OpenAI-compat endpoint, SigV1 auth) | Hosted, fast, no GPU on the laptop. Skill warns about region + cost during interview. |
+| Chat history | `OracleChatHistory` (custom subclass, since `langchain-oracledb` doesn't ship one) backed by `chat_history` table | Survives kill/restart. |
+| UI | **Open WebUI**, pointed at the project's OpenAI-compatible adapter | Polished out of the box, multi-conversation, drop-in for ChatGPT-style interaction. |
+| Adapter | A tiny FastAPI app exposing `/v1/chat/completions` over the LangChain chain | Open WebUI talks OpenAI; this is the thinnest glue. |
+| Lines | ~350-450 LOC per project | Heavier than the old "two scripts" beginner because the chat loop + history + adapter all need to be there. Still fits in an afternoon. |
 
-**Pitch.** Paste URLs into a CLI, get them back via natural-language search.
-
-**What the user does.**
-- `python add.py "https://..." "title" "description"` — appends a bookmark.
-- `python search.py "what was that thing about langchain?"` — top-3 hits.
-
-**LangChain primitives taught.**
-- `OracleVS.from_texts()` to bootstrap on first run.
-- `vs.add_texts(..., metadatas=[{"url": ..., "added_at": ...}])` for new bookmarks.
-- `vs.similarity_search()` for retrieval.
-- `vs.similarity_search_with_score()` so the user sees the distance.
-
-**Shape.** Two scripts (`add.py`, `search.py`) sharing a `store.py` module. ~80 lines total.
-
-**Demo.** A 30s GIF of typing one bookmark and finding it via a fuzzy query.
+The heavy lifting (DB up, store layer, history table) is delegated to `choose-your-path/skills/oracle-aidb-docker-setup` and `choose-your-path/skills/langchain-oracledb-helper`. Each project's `SKILL.md` invokes those before writing app code.
 
 ---
 
-## 2. Recipe finder
+## 1. PDFs-to-chat
 
-**Pitch.** Drop a folder of `.txt` recipes; ask "what can I make with chicken and rice?"
+**Pitch.** Drop PDFs in `data/pdfs/`, get a chat UI in Open WebUI that answers questions about them with citations.
 
 **What the user does.**
-- Place recipes in `recipes/`.
-- `python ingest.py` — embeds all of them once.
-- `python ask.py "what can I make with chicken and rice?"` — top-3 matches, with the source filename.
 
-**LangChain primitives taught.**
-- `OracleVS.from_texts(texts=..., metadatas=[{"filename": ...}])` — metadata as filename.
-- `vs.similarity_search_with_score()` — show how confident the match is.
-- The metadata-as-string monkeypatch (already non-trivial; the skill writes it for the user with a comment explaining why).
+1. Drop 1-N PDF files into `data/pdfs/`.
+2. `python -m pdf_chat.ingest` — chunks (per page + 800-token windows), embeds, stores in `OracleVS`. Idempotent: re-runs only embed new files.
+3. `docker compose up open-webui` — Open WebUI on `http://localhost:3000`, pre-configured to talk to the local FastAPI adapter on `:8000`.
+4. Chat. Citations include filename + page; click-through opens the PDF at that page (where the OS supports it).
 
-**Shape.** `ingest.py`, `ask.py`, `store.py`. ~100 lines total.
+**Layout.**
 
-**Demo.** Type a query about ingredients, see three recipe filenames + scores.
+```
+src/pdf_chat/
+  __init__.py
+  store.py          # from langchain-oracledb-helper
+  history.py        # from langchain-oracledb-helper
+  _monkeypatch.py   # from langchain-oracledb-helper
+  ingest.py         # PDF → chunks → embed → OracleVS
+  chain.py          # retriever → grok-4 → cited answer
+  adapter.py        # FastAPI: /v1/chat/completions ↔ chain
+data/pdfs/
+docker-compose.yml  # oracle + open-webui (the latter pinned to ghcr.io/open-webui/open-webui)
+.env.example
+verify.py
+```
+
+**Demo.** Drop the Oracle 26ai PDF release notes, ask "what's new in vector indexes?", get an answer with `[release_notes_26ai.pdf:p.14]` citation.
+
+**Distinct primitive taught.** Multi-page document chunking + page-level metadata for citations. The PDF parser of choice is `pypdf` (lightweight) or `unstructured` (heavier but cleaner) — skill picks `pypdf` by default.
 
 ---
 
-## 3. Dev journal
+## 2. Markdown-notes-to-chat
 
-**Pitch.** Append-only notes table with semantic recall. "What did I figure out about WebSockets last month?"
+**Pitch.** Point at your Obsidian / Logseq / dotfile-notes folder. Chat with your second brain.
 
 **What the user does.**
-- `python note.py "fixed the websocket reconnect bug — turns out keepalive=30s"` — appends.
-- `python recall.py "websockets reconnect"` — top-N.
 
-**LangChain primitives taught.**
-- Bootstrap once with `OracleVS.from_texts(["initial seed"], ...)`, then `add_texts` thereafter.
-- Timestamp metadata; demonstrating `filter={"month": "2026-04"}` once on the recall side.
+1. Set `NOTES_DIR=/path/to/your/notes` in `.env`.
+2. `python -m notes_chat.ingest` — walks the tree, chunks per H2 section, preserves markdown frontmatter as metadata.
+3. Open WebUI → chat.
+4. Answers cite `notes/area/topic.md#heading-anchor`. Markdown links are resolvable in Obsidian.
 
-**Shape.** `note.py`, `recall.py`, `store.py`. ~120 lines.
+**Layout.** Identical to PDF-to-chat, swap `ingest.py` for a markdown walker. ~400 LOC.
 
-**Demo.** Add three notes, recall one with a paraphrased query.
+**Demo.** "What did I write about distributed locks?" → returns the relevant snippets with file paths + headings.
+
+**Distinct primitive taught.** **Hierarchy-aware chunking.** PDFs are flat by page; markdown has H1/H2/H3 structure. The ingest walker chunks at H2 boundaries (not arbitrary token windows) so retrieved chunks are semantically clean. Frontmatter (`tags: [...]`, `date: ...`) becomes filterable metadata — sets up the user for the intermediate-tier "filter at retrieval" pattern without forcing it yet.
 
 ---
 
-## 4. Movie taste graph
+## 3. Web-pages-to-chat
 
-**Pitch.** Insert movies you liked (with plot summaries); get "more like this" recommendations.
+**Pitch.** Personal Pocket replacement with chat. Save URLs, ask about them later.
 
 **What the user does.**
-- `python like.py "Arrival" "<plot summary>"`
-- `python more_like.py "Arrival"` — top-5 nearest neighbors among your liked list.
 
-**LangChain primitives taught.**
-- `vs.as_retriever(search_kwargs={"k": 5})` — first taste of the retriever interface (sets up intermediate path).
-- Search-by-title uses metadata filter to find the seed embedding, then a follow-up search by content.
+1. `python -m web_chat.add "https://example.com/article"` — fetches via `trafilatura` (extracts main content, drops nav/ads), chunks, embeds.
+2. Repeat for each URL you want to remember (or pipe a list of bookmarks in).
+3. Open WebUI → chat. Answers cite source URLs and page titles.
 
-**Shape.** `like.py`, `more_like.py`, `store.py`. ~100 lines.
+**Layout.** Same skeleton; `add.py` replaces `ingest.py`, takes a URL on argv instead of walking a folder.
 
-**Demo.** Like 5 movies, get a "more like Arrival" output that's clearly thematic.
+**Demo.** Save 10 articles about a topic over a month. Ask "what's the consensus view on X across what I've read?" → multi-source synthesis with link list.
+
+**Distinct primitive taught.** **Per-document add with rich metadata.** Each `add` is one HTTP fetch + one `add_documents` call (vs the bulk-folder pattern of ideas 1-2). Metadata includes `{"url": ..., "fetched_at": ..., "title": ..., "byline": ...}` — perfect setup for ranking by recency or filtering by author later.
 
 ---
 
-## 5. First-vector-query smoke
+## Why these three (and why in this order)
 
-**Pitch.** No project. Just verify the whole stack — Docker container, Oracle 26ai, Ollama, `OracleVS` — works on the user's machine.
+The point of beginner is to teach the skeleton, not surprise the user with three different architectures. All three have:
 
-**What the user does.**
-- `python smoke.py` — does `OracleVS.from_texts(["choose-your-path lives"], ...)`, searches for "choose-your-path", asserts it comes back. Prints `smoke: OK`.
+- The same `store.py` (output of `langchain-oracledb-helper`).
+- The same `chain.py` (retriever → Grok 4 → cited prompt).
+- The same `adapter.py` (FastAPI wraps the chain into `/v1/chat/completions`).
+- The same Open WebUI pointing at the adapter.
 
-**LangChain primitives taught.**
-- The 5-line sermon, exactly. Nothing more.
+What differs is one file: `ingest.py` (or `add.py`). The user picks based on **what corpus they have lying around**, not based on what they want to learn — they'll learn the same thing either way. By idea 3, they should be able to write a fourth ingest module from scratch (RSS feed, code repo, email export) without the skill.
 
-**Shape.** One file. ~30 lines.
-
-**Demo.** A terminal screenshot that says `smoke: OK`. Boring but honest.
-
----
-
-## 6. Shell history search
-
-**Pitch.** Embed your `~/.zsh_history` (or `.bash_history`); ask "what was that `ffmpeg` command I used to strip audio?"
-
-**What the user does.**
-- `python ingest.py` — reads `~/.zsh_history` (or a path passed as arg), filters lines >5 chars, embeds them with `{"shell": "zsh", "ts": ...}` metadata.
-- `python find.py "strip audio from a video"` — top-3 commands.
-
-**LangChain primitives taught.**
-- `OracleVS.from_texts()` once on the full history. Shows that not all data needs to be appended a row at a time — sometimes ingestion is a single bulk pass over a file you already own.
-- `similarity_search_with_score()` so the user sees match confidence on real, noisy data.
-
-**Shape.** `ingest.py`, `find.py`, `store.py`. ~90 lines.
-
-**Demo.** Search a paraphrase of a real command from your history; see it surface.
-
----
-
-## 7. Flashcard recall
-
-**Pitch.** A study aid. Type a question; get the nearest flashcard plus a confidence score that tells you whether *you* should remember it without peeking.
-
-**What the user does.**
-- `python add.py "What does ARP do?" "Maps IPs to MAC addresses on a LAN."`
-- `python ask.py "how do hosts find each other on a LAN?"` — top-1 card with score; the answer is only revealed if the score crosses a threshold (close enough match).
-
-**LangChain primitives taught.**
-- Two-field metadata (`{"front": ..., "back": ...}`).
-- `similarity_search_with_score()` used as a *gate*, not just a sort key. Below threshold → "you should know this, try again." Above threshold → reveal.
-- Custom score interpretation (cosine distance closer to 0 = better).
-
-**Shape.** `add.py`, `ask.py`, `store.py`. ~100 lines.
-
-**Demo.** Add 10 cards; ask paraphrases of three of them. Watch confidence rise and fall sensibly.
-
----
-
-## 8. Podcast / video note search
-
-**Pitch.** Drop timestamped notes from your podcast or video log (e.g. `[00:13:00] CRDTs explained as monotonic merge`). Ask "where did I hear about CRDTs?"; get back filename + jump-to timestamp.
-
-**What the user does.**
-- Place notes in `episodes/` — one file per episode, lines beginning `[hh:mm:ss]` are individual chunks.
-- `python ingest.py` — splits each line into its own embedding with `{"episode": ..., "ts": "00:13:00"}` metadata.
-- `python find.py "CRDTs"` — top-3 with episode + timestamp.
-
-**LangChain primitives taught.**
-- Within-file chunking (vs the recipes idea, which embeds whole files).
-- Structured metadata that's actually *useful at retrieval time* — the timestamp lets the user open the right place in the source.
-
-**Shape.** `ingest.py`, `find.py`, `store.py`. ~110 lines.
-
-**Demo.** Search a topic, click the printed timestamp, jump to the moment in your audio/video player.
+Order is deliberate:
+1. **PDFs** is the canonical "RAG demo" people recognize from blog posts. Lowest activation energy.
+2. **Markdown** is the most personal — your own notes — so it's the most rewarding to chat with. Slightly more involved (hierarchy-aware chunking).
+3. **Web pages** introduces the per-add pattern instead of bulk ingest. The most flexible long-term but the least "shiny on first run."
 
 ---
 
 ## What the skill won't scaffold
 
-If the user pitches:
+- **No multi-user.** Open WebUI's auth is trivially defeatable when you're running it on `localhost`. Single-user only at this tier.
+- **No agent / tool-calling.** The chain is retrieve-then-generate, no MCP, no `bind_tools`. Tier 2's job.
+- **No hybrid (vector + BM25) retrieval.** Pure vector. Hybrid is intermediate.
+- **No notebook by default.** Beginner output is the project itself; if the user wants to walk through it cell-by-cell, they ask, and the skill copies `shared/templates/notebook.template.ipynb`.
+- **No self-hosted LLM.** OCI GenAI Grok 4 only. If the user has no OCI tenancy, the skill stops and points them at the OCI free trial signup. Earlier versions allowed Ollama as a fallback at this tier — that's gone, on purpose, so the user gets the production-feeling stack on day one.
 
-- **A web UI.** Out of scope for beginner — that's intermediate. Skill says "great idea, save it for the next path."
-- **Multiple LLMs.** Beginner uses one Ollama model.
-- **Anything chat-like.** No conversation history at this tier — that's an intermediate primitive.
-- **Anything with auth, multiple users, or "production-grade".** This is a learning project; keep it small.
+---
+
+## What you get (sanity check)
+
+By the time `verify.py` reports OK, the user has:
+
+- A healthy Oracle 26ai Free container.
+- A populated `OracleVS` collection (or empty, if they haven't run `ingest` yet — verify.py uses a temp collection, not the real one).
+- A working FastAPI adapter on `:8000`.
+- Open WebUI on `:3000` already pointed at the adapter.
+- A README with the screenshot slot, the "Why Oracle" paragraph, and the run-locally instructions.
+
+That's the deliverable. Not a tutorial — a thing that works, ready for a 30-second demo recording.

@@ -38,18 +38,19 @@ For v1 the skill only fully supports option 1. Option 2 = the user has done the 
 ## Q4 — Inference
 
 > **What should generate text and embeddings?**
-> Beginner default: **Ollama (local)**.
-> Intermediate / advanced: pick one.
->   1. **Ollama (local)** — free, no account, no internet.
->   2. **OCI Generative AI** (OpenAI-compatible endpoint) — needs `~/.oci/config` or instance principal; default chat model = Grok 4 (`us-chicago-1` only).
->   3. **Bring your own OpenAI-compatible URL** — paste base_url + key.
+> All three tiers use **OCI Generative AI** for the LLM (`grok-4` in `us-chicago-1`, OpenAI-compatible endpoint, Pattern 1 SigV1 auth). What differs is the embedder:
+>   - **beginner** → OCI `cohere.embed-english-v3.0` (1024 dim).
+>   - **intermediate / advanced** → in-database ONNX (`MY_MINILM_V1`, 384 dim) — embeddings happen inside Oracle via `VECTOR_EMBEDDING(MODEL USING text)`, no external embedder process.
 >
-> *Why: this picks the embedder dim, the chat client, and which env vars get filled in.*
+> *Why: this picks the embedder dim, the chat client, and which env vars get filled in. All three tiers require `~/.oci/config` or instance principal.*
 
-The interview captures the choice and the embedding model in the same breath:
-- Ollama → embedder = `nomic-embed-text` (768), chat = `llama3.1:8b` (default) or `qwen2.5:7b` (with thinking-mode mitigations).
-- OCI → embedder = `cohere.embed-english-v3.0` (1024), chat = `grok-4`.
-- BYO → ask the user for embed model + dim explicitly. The skill *will not guess*.
+The skill confirms:
+- `~/.oci/config` exists (or instance principal env vars present).
+- `OCI_COMPARTMENT_ID` is captured.
+- The user is OK with non-zero OCI cost (Grok 4 is not on the always-free list).
+- Region is `us-chicago-1` (warn + offer Cohere/Llama same-region fallback if not).
+
+Older versions of this interview offered Ollama and BYO endpoints. Those flows live in `archive/` ideas; the active tiers don't surface them.
 
 ## Q5 — Project topic
 
@@ -75,22 +76,25 @@ After all questions, the skill prints back:
 ```
 About to scaffold:
   path:        intermediate
-  target_dir:  ~/git/personal/codebase-qa
+  target_dir:  ~/git/personal/nl2sql-explorer
   database:    local docker (26ai Free)
-  inference:   OCI Generative AI (Grok 4 in us-chicago-1, Cohere embeddings 1024d)
-  project:     codebase Q&A
+  inference:   OCI GenAI Grok 4 (us-chicago-1)
+               + in-DB ONNX embeddings (MY_MINILM_V1, 384d)
+  mcp:         oracle-database-mcp-server (read_only)
+  project:     NL2SQL data explorer
   notebook:    yes
-  references:  shared/references/{langchain-oracledb,oci-genai-openai,hybrid-search,...}.md
+  references:  shared/references/{langchain-oracledb,oci-genai-openai,onnx-in-db-embeddings,...}.md
 
 Proceed? (y/n)
 ```
 
-The skill does **not** scaffold without an explicit `y`.
+The skill does **not** scaffold without an explicit `y`. For advanced idea 3 (conversational schema designer), the skill *additionally* requires an explicit `y` for `mcp_sql_mode=read_write`.
 
 ## Stop conditions
 
 The interview halts (and the skill exits with a status message, not a half-built project) if:
 - The user says they want a database other than Oracle.
+- The user has no OCI tenancy / `~/.oci/config` and won't set one up.
 - The user picks an embedder/dim the skill can't validate against `OracleVS`.
 - The user wants a language other than Python (out of scope v1 — point them at the plan).
 - The target dir is non-empty and the user declines overwrite.

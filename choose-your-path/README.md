@@ -1,46 +1,45 @@
 # choose-your-path
 
-A skill set that interrogates you, picks a project at your level, and scaffolds a real, runnable Oracle-AI-DB project you can ship to social media in an afternoon (beginner) or a week (advanced).
-
-Three paths. Pick by complexity, not access — any of them are open to anyone.
+A skill set that interrogates you, picks an Oracle-AI-DB project at your level, and scaffolds a real, runnable application powered by **OCI Generative AI Grok 4** + **`langchain-oracledb`** + **Oracle 26ai Free in Docker**. Three paths, three projects per path. Pick by complexity, not access — any of them are open to anyone with an OCI tenancy.
 
 | Path | What you build | Stack | Time |
 | --- | --- | --- | --- |
-| [beginner](./beginner/) | A small CLI that does semantic search on Oracle. | `langchain-oracledb` + Ollama + Oracle 26ai Free in Docker. | ~1 afternoon |
-| [intermediate](./intermediate/) | A RAG chatbot with a UI, persistent chat history, hybrid retrieval. | + OCI Generative AI (Grok 4 / Cohere) or Ollama, Gradio. | ~1-2 days |
-| [advanced](./advanced/) | An agent system where Oracle is the **only** state store. | + JSON Duality, property graph, ONNX in-DB embeddings, 6 memory types. | ~3-5 days |
+| [beginner](./beginner/) | Three "X-to-chat" flavors — PDFs, Markdown notes, web pages — into a polished Open WebUI chat. | `langchain-oracledb` + `OracleVS` + OCI Cohere embeddings + Grok 4. | ~1 afternoon |
+| [intermediate](./intermediate/) | A Grok-4 tool-calling agent that talks to a live Oracle schema via `oracle-database-mcp-server`, with **embeddings happening inside the database** (registered ONNX model, no external embedder). | + Oracle MCP + in-DB ONNX + Open WebUI. | ~1-2 days |
+| [advanced](./advanced/) | An agent system where Oracle is the **only** state store, built by composing the three [`skills/`](./skills/) building blocks. | + JSON Duality, six memory types, agent self-memory, oracle-database-mcp-server in `read_write` mode (with safety rails) when needed. | ~3-5 days |
 
 ## How it works
 
 1. You point your agent (Claude Code, Cursor, Aider, or any agent that reads markdown skills) at this directory.
 2. The agent reads `SKILL.md`, asks you one question (which path), then hands off to the path's own skill.
-3. The path skill interviews you on the rest (where to scaffold, which inference backend, which project topic), confirms, and builds.
-4. The skill brings up an Oracle 26ai Free container in Docker, runs `verify.py` end-to-end, and only declares done when verify is green.
-5. You get a polished, social-media-ready repo at the target dir of your choice.
+3. The path skill runs the [interview](./shared/interview.md) — six questions max — and confirms before scaffolding.
+4. The path skill **invokes the building-block skills** under [`skills/`](./skills/) for the boring layers (Docker compose, `OracleVS` wiring, MCP server setup), then writes the application logic itself.
+5. It runs `verify.py` end-to-end and only declares done when verify is green.
+6. You get a polished, social-media-ready repo at the target dir of your choice.
 
-The skills are **agent-agnostic markdown** — they don't depend on a specific harness. Each `SKILL.md` is a step-by-step the agent must follow. The skill cites real exemplar files (from this repo and from jasperan's other projects) so the model copies known-good patterns instead of inventing Oracle SQL.
+The skills are **agent-agnostic markdown** — they don't depend on a specific harness. Each `SKILL.md` is a numbered procedure the agent must follow. The skills cite real exemplars (from this repo and from jasperan's other projects) so the model copies known-good patterns instead of inventing Oracle SQL.
 
 ## What you'll need
 
-- Docker. The skills use the official Oracle 26ai Free image; no Oracle install on your host.
-- Python 3.11+.
-- (Beginner) Ollama installed. The skills tell you which model to pull.
-- (Intermediate / Advanced, optional) An OCI tenancy + `~/.oci/config` if you want Grok 4 / Cohere. Otherwise stick to Ollama and you'll never leave your laptop.
+- **Docker.** The skills bring up the official Oracle 26ai Free image; no Oracle install on your host.
+- **Python 3.11+.**
+- **An OCI tenancy** with `~/.oci/config` and an `OCI_COMPARTMENT_ID`. *All three tiers* now require this — Grok 4 lives at `inference.generativeai.us-chicago-1.oci.oraclecloud.com`. The earlier Ollama-fallback variants are preserved in [`archive/`](./archive/) but no longer actively scaffolded.
 
 ## What gets scaffolded
 
 Every project comes with:
 
-- A working `docker-compose.yml` for Oracle 26ai Free.
+- A working `docker-compose.yml` for Oracle 26ai Free *plus* Open WebUI on `:3000`.
 - A `verify.py` that proves the whole stack runs end-to-end.
+- A FastAPI adapter exposing `/v1/chat/completions` so Open WebUI talks to your agent.
 - A README built from a template, with the "Why Oracle" paragraph auto-assembled from the features your project actually uses.
-- A `.gitignore` that's already tuned for the project's deps.
+- A `.gitignore` already tuned for the project's deps.
 
-Intermediate adds a Gradio UI and a Jupyter notebook. Advanced adds the notebook and a feature-tab dashboard.
+Intermediate adds a Jupyter notebook (default yes). Advanced makes the notebook mandatory and adds a `docs/` slot for the architecture diagram.
 
 ## Why three paths
 
-Because building "your first Oracle vector query" and "an agent system using Oracle as the only state store" are not the same task. Lumping them under one tutorial means everyone gets something wrong-sized — too much for the beginner, too thin for the agent-builder. Three sized doors.
+Because building "your first Oracle vector query" and "an agent system using Oracle as the only state store" are different tasks. Lumping them under one tutorial means everyone gets something wrong-sized — too much for the beginner, too thin for the agent-builder. Three sized doors, three ideas behind each — depth-first, not breadth-first.
 
 ## Where projects land
 
@@ -48,9 +47,12 @@ By default: `~/git/personal/<project-slug>` — outside this repo, so what you b
 
 ## See also
 
-- [`PLAN.md`](./PLAN.md) — the full design spec. Read this if you want to understand why each path is shaped the way it is, or if you want to contribute a new project idea.
-- [`shared/references/`](./shared/references/) — the canonical docs the skills cite. Read these if you want to learn the underlying tech without going through a project.
-- [`shared/references/visual-oracledb-features.md`](./shared/references/visual-oracledb-features.md) — frozen catalog of Oracle AI Database features, mirrored from https://jasperan.github.io/visual-oracledb/.
+- [`GETTING_STARTED.md`](./GETTING_STARTED.md) — three worked walk-throughs (one per tier), with the exact questions to answer in the interview and the exact commands to run after.
+- [`PLAN.md`](./PLAN.md) — the design spec. Read this if you want to understand why each path is shaped the way it is, or want to contribute a new project idea.
+- [`skills/`](./skills/) — the three reusable building-block skills that the higher tiers compose.
+- [`shared/references/`](./shared/references/) — the canonical docs the skills cite.
+- [`shared/references/visual-oracledb-features.md`](./shared/references/visual-oracledb-features.md) — frozen catalog of Oracle AI Database features.
+- [`archive/`](./archive/) — superseded idea catalog (the previous 8-per-tier menu). Kept around for reference and the Ollama-flavored ideas.
 
 ## License
 

@@ -1,24 +1,24 @@
 ---
 name: choose-your-path-beginner
-description: Scaffold a small, runnable Oracle-AI-DB project using langchain-oracledb + Ollama + Oracle 26ai Free in Docker. For users who haven't touched Oracle before and want to ship something in an afternoon.
+description: Scaffold a small RAG chatbot on Oracle 26ai Free + langchain-oracledb + OCI Generative AI (Cohere embeddings + Grok 4) + Open WebUI. Three flavors that share one skeleton — PDF / Markdown / Web. For users new to Oracle who want a polished demo running in an afternoon.
 inputs:
   - target_dir: where to scaffold (default ~/git/personal/<slug>)
-  - topic: optional; one of the ideas in beginner/project-ideas.md, or a free-text pitch
+  - topic: optional; one of beginner/project-ideas.md, or a free-text pitch
 ---
 
-The user picked the **beginner** path. Your job is to interrogate them, scaffold a real project, run verify, and stop.
+The user picked the **beginner** path. Your job is to interview them, scaffold a working project that ingests a corpus and exposes a Grok-4-powered chat UI in Open WebUI, run verify, and stop. The output is a real shippable mini-product, not a tutorial.
 
 ## Step 0 — Read these references first (mandatory)
-
-Load and keep at hand:
 
 - `shared/references/sources.md`
 - `shared/references/oracle-26ai-free-docker.md`
 - `shared/references/langchain-oracledb.md`  ← load-bearing
-- `shared/references/ollama-local.md`
+- `shared/references/oci-genai-openai.md`  ← load-bearing (Pattern 1 SigV1 auth)
 - `shared/references/oracledb-python.md` (skim — beginner only touches `oracledb.connect`)
 - `shared/references/exemplars.md`
 - `beginner/project-ideas.md`
+- `skills/oracle-aidb-docker-setup/SKILL.md` — you'll invoke this
+- `skills/langchain-oracledb-helper/SKILL.md` — you'll invoke this
 
 You may not write SQL, embedder calls, or table-creation code that contradicts these files. If the user asks for something not covered, say so and stop — don't invent.
 
@@ -26,89 +26,134 @@ You may not write SQL, embedder calls, or table-creation code that contradicts t
 
 Run the questions from `shared/interview.md`. For beginner specifically:
 
-- Q3 (DB target) — default to "Local Docker" without re-asking unless the user wants otherwise.
-- Q4 (Inference) — Ollama. Confirm:
-  - chat model: `llama3.1:8b` (default) or `qwen2.5:7b` (with thinking-mode mitigations from `ollama-local.md`).
-  - embed model: `nomic-embed-text` (always; 768 dims).
-- Q5 (Topic) — pick one of the eight from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to idea 5 (smoke-only) and tell the user why.
-- Q6 (Notebook) — default **no**. Beginner projects don't get notebooks unless the user explicitly asks.
+- **Q3 (DB target)** — default to "Local Docker" without re-asking.
+- **Q4 (Inference)** — *not optional anymore at this tier*. **OCI Generative AI** is the only choice. Verify:
+  - `~/.oci/config` exists. If not, stop and tell the user to run `oci setup config`.
+  - `OCI_COMPARTMENT_ID` is in env or capture it now.
+  - The user is OK with non-zero OCI cost (mention this once — Grok 4 is not on the always-free list).
+  - Region: warn if not `us-chicago-1` (Grok 4 only ships there). If the user is elsewhere, offer `cohere.command-r-plus` as a same-region fallback.
+  - Embedder: `cohere.embed-english-v3.0` (1024 dim) by default. Multilingual variant available if the user explicitly asks.
+  - Chat: `grok-4`.
+- **Q5 (Topic)** — pick one of the three from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to **idea 1 (PDFs)** and tell the user why.
+- **Q6 (Notebook)** — default **no**. Beginner ships the chat UI, not a notebook walkthrough.
 
-Print the confirmation block from `interview.md`. Do not proceed without an explicit `y`.
+Print the confirmation block from `interview.md`. Don't proceed without an explicit `y`.
 
 ## Step 2 — Resolve choices
 
-Build a scaffold spec dict from interview answers:
+Build a scaffold spec from the interview:
 
-| Variable | Source |
+| Variable | Value |
 | --- | --- |
-| `project_slug` | derived from topic, kebab-case (`bookmarks-search`, `recipe-finder`, ...) |
-| `target_dir` | answer to Q2, or `~/git/personal/<project_slug>` |
-| `embedder_pkg` | `langchain_ollama.OllamaEmbeddings` |
-| `embedder_init` | `OllamaEmbeddings(model="nomic-embed-text")` |
-| `embedding_dim` | `768` |
-| `llm_pkg` | `langchain_ollama.ChatOllama` |
-| `llm_init` | `ChatOllama(model="<chat_model>", temperature=0)` |
-| `inference_enabled` | `False` for ideas 1-4 (no chat); `False` for idea 5 |
-| `qwen_mitigations` | True iff chat model starts with `qwen` |
-| `entrypoint` | one of the scripts named in the chosen idea (e.g. `search.py`) |
-
-If `qwen_mitigations`: add `OLLAMA_NUM_THREAD=1` to `.env`, and inject the strip-`<think>` helper into the project's main module per `ollama-local.md`.
+| `project_slug` | derived from topic, kebab-case: `pdf-chat`, `notes-chat`, `web-chat` |
+| `package_slug` | snake_case: `pdf_chat`, `notes_chat`, `web_chat` |
+| `target_dir` | from Q2 or `~/git/personal/<project_slug>` |
+| `embedder` | `oci-cohere` (always) |
+| `embedding_dim` | 1024 |
+| `llm_model` | `grok-4` (or fallback chosen during interview) |
+| `oci_base_url` | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai` |
+| `collections` | `["DOCUMENTS", "CONVERSATIONS"]` |
+| `has_chat_history` | `True` |
+| `ingest_module` | `ingest.py` for PDFs/markdown, `add.py` for web pages |
+| `entrypoint` | `python -m <package_slug>.adapter` (FastAPI on :8000); Open WebUI on :3000 talks to it |
 
 ## Step 3 — Scaffold
 
-Create files in this exact order. **Cite the exemplar in a comment at the top of any file you write that copies a pattern.**
+Order matters — invocation of building-block skills happens **before** project code.
 
-1. `target_dir/` — create. Refuse if non-empty (per `interview.md`).
-2. `.gitignore` — `.env`, `__pycache__/`, `.venv/`, `*.pyc`.
-3. `docker-compose.yml` — copy from `shared/templates/docker-compose.oracle-free.yml` verbatim.
-4. `.env.example` — copy from `shared/templates/env.example`. Trim sections the project doesn't use (OCI, BYO).
-5. `.env` — `.env.example` filled in. Generate `ORACLE_PWD` per `oracle-26ai-free-docker.md`. Do not commit (already in .gitignore).
-6. `pyproject.toml` — from `shared/templates/pyproject.toml.template`, with `dependencies = ["oracledb>=2.4", "langchain-oracledb>=0.1", "langchain-ollama>=0.2", "python-dotenv>=1.0"]`. No Gradio, no FastAPI.
-7. `store.py` — the one-and-only DB module. Pattern from `~/git/work/ai-solutions/apps/langflow-agentic-ai-oracle-mcp-vector-nl2sql/components/vectorstores/oracledb_vectorstore.py` (cited at top). Exposes:
-   ```python
-   def get_store(table_name: str) -> OracleVS: ...
+### 3a — Foundation via building-block skills
+
+1. **Refuse if `target_dir` is non-empty.**
+2. **Invoke `skills/oracle-aidb-docker-setup`.** Pass `target_dir`. It writes `docker-compose.yml` (Oracle), `.env` (with generated `ORACLE_PWD`), brings the container up healthy. Block until it reports OK.
+3. Append the **Open WebUI** service to the generated `docker-compose.yml`:
+   ```yaml
+   open-webui:
+     image: ghcr.io/open-webui/open-webui:main
+     container_name: open-webui
+     ports:
+       - "127.0.0.1:3000:8080"
+     environment:
+       - OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+       - OPENAI_API_KEY=local-stub-key
+       - WEBUI_AUTH=False
+     extra_hosts:
+       - "host.docker.internal:host-gateway"
+     volumes:
+       - openwebui_data:/app/backend/data
+   volumes:
+     openwebui_data:
    ```
-   The `get_store` either calls `OracleVS.from_texts(["__bootstrap__"], ...)` if the table doesn't exist, or returns `OracleVS(client=conn, embedding_function=..., table_name=...)` if it does.
-8. **Project files** for the chosen idea, per `beginner/project-ideas.md` shape. Each file ≤ 80 lines. No abstractions. No FastAPI. No UI.
-9. `verify.py` — copy `shared/templates/verify.template.py`, fill placeholders. For beginner ideas without an LLM call, set `inference_enabled = False`.
-10. `README.md` — copy `shared/templates/readme.template.md`, fill all `{{...}}` placeholders. The "What I built" section stays as a TODO with a one-line comment for the user.
+4. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=oci-cohere`, `collections=["DOCUMENTS", "CONVERSATIONS"]`, `has_chat_history=True`. It writes `store.py`, `_monkeypatch.py`, `history.py`, `migrations/001_chat_history.sql`. Block until it reports OK.
+
+### 3b — Project-specific code (the only files this skill writes itself)
+
+5. `target_dir/.gitignore` — extend with `data/`, `*.pdf`, `notes/`.
+6. `target_dir/pyproject.toml` — extend deps:
+   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-openai>=0.2`, `oci-openai>=0.1`, `oci>=2.130`.
+   - Idea 1 (PDFs): + `pypdf>=4`.
+   - Idea 2 (Markdown): + `markdown-it-py>=3`.
+   - Idea 3 (Web): + `trafilatura>=1.10`, `httpx>=0.27`.
+7. `target_dir/.env.example` — append:
+   ```
+   OCI_COMPARTMENT_ID=
+   OCI_GENAI_BASE_URL=https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai
+   OCI_LLM_MODEL=grok-4
+   OCI_EMBED_MODEL=cohere.embed-english-v3.0
+   ```
+8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat) and `shared/snippets/oci_cohere_embeddings.py` (embedder). Cite both at the top.
+9. `src/<package_slug>/<ingest_module>` — per idea:
+   - **Idea 1**: walk `data/pdfs/`, parse via `pypdf`, chunk by page + 800-token windows, `store.get_store("DOCUMENTS").add_texts(...)` with `metadata={"filename": ..., "page": ...}`. Idempotent — keep a `data/.ingested.json` ledger.
+   - **Idea 2**: walk `NOTES_DIR`, chunk by H2 sections via `markdown-it-py`, metadata = `{"path": ..., "heading": ..., "frontmatter": {...}}`.
+   - **Idea 3**: `python -m web_chat.add URL` — `trafilatura.fetch_url` + `extract`, chunk, metadata = `{"url": ..., "title": ..., "fetched_at": ..., "byline": ...}`.
+10. `src/<package_slug>/chain.py` — LCEL chain: retriever (`get_store("DOCUMENTS").as_retriever(k=5)`) → prompt with citation instructions → `ChatOpenAI`-shaped LLM via OCI. Wrap with `RunnableWithMessageHistory(chain, get_history_factory(get_connection()), input_messages_key="question", history_messages_key="history")`. Citation format depends on idea (filename:page / file#heading / URL).
+11. `src/<package_slug>/adapter.py` — FastAPI app exposing `/v1/chat/completions` (OpenAI-compatible). Body shape matches what Open WebUI sends; map `messages[-1].content` to the chain input, return assistant message in OpenAI shape. Stream via `text/event-stream`.
+12. `verify.py` — copy `shared/templates/verify.template.py`, fill in:
+    - `inference_enabled = True`.
+    - Round-trip: `embedder.embed_query("dim check")` → assert dim == 1024.
+    - Smoke a single chain call against a tiny known corpus (3 lines of test text).
+13. `README.md` — copy `shared/templates/readme.template.md`, fill placeholders. The "Why Oracle" paragraph names: AI Vector Search, OracleVS multi-collection, persistent chat history. Include a "Stack" section listing OCI GenAI Grok 4, Cohere embeddings, langchain-oracledb, Open WebUI. Leave the screenshot slot for the chat UI.
 
 ## Step 4 — Verify
 
-1. Print: "Bringing up Oracle 26ai Free; first boot ~90s."
-2. Run `docker compose up -d --wait` in `target_dir`.
-3. If `--wait` fails after 3 minutes, print the most recent `docker compose logs oracle | tail -20` and stop.
-4. Run `python verify.py`. Expect `verify: OK (db, vector)`.
-5. On failure, follow the recovery loop in `shared/verify.md` (max 3 retries, then stop and report).
-6. Do NOT proceed to Step 5 until verify is green.
+1. The DB is already up (skill 1 ensured this).
+2. From `target_dir`: `python -m venv .venv && source .venv/bin/activate && python -m pip install -e .`.
+3. `python verify.py`. Expect `verify: OK (db, vector, inference)`. On failure: follow `shared/verify.md` recovery loop, max 3 retries.
+4. Bring Open WebUI up: `docker compose up -d open-webui`. Wait ~10s.
+5. **Run the adapter in the background:** `python -m <package_slug>.adapter` (port 8000). Hit `http://localhost:8000/v1/models` — should return JSON listing one model. Then check `http://localhost:3000` responds (Open WebUI loaded).
+6. Don't keep the adapter running — just confirm it boots cleanly. Kill it before reporting done.
 
 ## Step 5 — Polish for sharing
 
 1. README — confirm all placeholders are filled.
-2. Add `docs/` directory; leave a note: "drop a 30s demo GIF as `docs/demo.gif`."
-3. Print a final report:
+2. `docs/` — leave a note: "drop a 30s demo GIF as `docs/demo.gif` showing PDF drop → ingest → chat".
+3. Final report:
    ```
    Done.
-     project at: <target_dir>
-     run with:   cd <target_dir> && python <entrypoint>
-     verify:     OK
-     next:       record a 30s demo, fill the "What I built" section, push to GitHub.
+     project at:    <target_dir>
+     run with:      cd <target_dir>
+                    docker compose up -d
+                    python -m <package_slug>.<ingest_module> <args>
+                    python -m <package_slug>.adapter   # blocks; Open WebUI on :3000
+     verify:        OK
+     ui:            http://localhost:3000  (Open WebUI)
+     adapter:       http://localhost:8000/v1/chat/completions
+     next:          drop your corpus, run ingest, record a 30s demo, push to GitHub.
    ```
 
 ## Stop conditions
 
-Stop and ask the user — don't barrel through — when:
-
+- `~/.oci/config` missing — stop, point at `oci setup config`.
+- User explicitly refuses to use OCI GenAI (cost concern, no tenancy). Tell them this tier requires it; offer to point them at the archive's old Ollama-flavored beginner ideas if they want.
 - Verify fails 3 times.
-- The user's topic doesn't fit any idea and idea 5 (smoke) seems wrong.
-- The target dir is non-empty.
+- Target dir non-empty.
 - The user picks a non-Oracle DB or non-Python language. Print "out of scope for v1" and stop.
 
 ## What you must NOT do
 
-- Don't write raw `CREATE TABLE ... VECTOR(...)` DDL — let `OracleVS.from_texts` do it.
-- Don't introduce FastAPI, Gradio, Flask, or any UI framework — beginner is CLI-only.
-- Don't introduce Redis, ChromaDB, FAISS, or any non-Oracle store — even as fallback.
-- Don't write more than ~200 lines of project code total. If you find yourself going past that, stop and reduce.
-- Don't generate ORACLE_PWD with a weak pattern. Use the generator in `oracle-26ai-free-docker.md`.
-- Don't claim "done" before verify is green.
+- Don't write raw `CREATE TABLE ... VECTOR(...)` DDL — `OracleVS.from_texts` (via the helper skill's bootstrap dance) handles it.
+- Don't introduce Gradio, Streamlit, Flask, or any non-Open-WebUI frontend. Open WebUI + FastAPI adapter is the contract.
+- Don't introduce Redis, Postgres, ChromaDB, FAISS, or any non-Oracle store — even as a fallback.
+- Don't introduce Ollama as a fallback. Earlier versions of this tier supported it; the new tier is OCI-only on purpose. If the user can't use OCI, point them at `archive/beginner-ideas.md`.
+- Don't write more than ~450 lines of project code total. If you're going past that, stop and reduce.
+- Don't generate `ORACLE_PWD` yourself — the helper skill does it.
+- Don't claim done before verify is green AND the adapter boots cleanly.

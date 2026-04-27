@@ -1,148 +1,182 @@
 ---
 name: choose-your-path-advanced
-description: Scaffold an agent system where Oracle AI DB is the *only* state store. Multi-feature (vector + memory + at least one of JSON Duality / property graph / ONNX in-DB) on Oracle 26ai Free + OCI GenAI (or Ollama) + LangChain + Gradio. For users who've built agents before and want a real DB-as-only-store demo.
+description: Scaffold an agent system where Oracle AI DB is the *only* state store, composed from the choose-your-path/skills/ building-block library. Stack — langchain-oracledb + oracle-database-mcp-server + in-DB ONNX embeddings + OCI GenAI Grok 4 + Open WebUI. Three projects — production-feeling NL2SQL+RAG hybrid analyst, self-improving research agent, conversational schema designer. For users who want a real DB-as-only-store agent demo.
 inputs:
   - target_dir: where to scaffold (default ~/git/personal/<slug>)
   - topic: optional; one of advanced/project-ideas.md, or a free-text pitch within the constraint
 ---
 
-The user picked the **advanced** path. The defining constraint is **Oracle AI DB is the only state store** — no Redis, no Postgres, no SQLite, no Chroma/FAISS/Qdrant/Pinecone, no JSON / pickle on disk for runtime state. The skill enforces this in scaffolding *and* in the verify step.
+The user picked the **advanced** path. Two non-negotiable rules at this tier:
+
+1. **Oracle AI DB is the only state store.** No Redis, no Postgres, no SQLite, no Chroma/FAISS/Qdrant/Pinecone, no JSON or pickle on disk for runtime state. `verify.py` greps `src/` for forbidden imports and fails the build.
+2. **You compose, you don't write boilerplate.** The Oracle layer comes from `skills/oracle-aidb-docker-setup`, `skills/langchain-oracledb-helper`, `skills/oracle-mcp-server-helper`. Your job is to **invoke those, then write the application logic** (the agent loop, the memory adapters, the tools, the adapter, the notebook). ~500-700 LOC of project code per idea — not 1500.
 
 ## Step 0 — Read these references first
 
-- All of `shared/references/`. Yes, all of them. The advanced path can touch every feature.
-- Specifically required: `langchain-oracledb.md`, `oci-genai-openai.md`, `ai-vector-search.md`, `hybrid-search.md`, `json-duality.md`, `property-graph.md`, `onnx-in-db-embeddings.md`, `visual-oracledb-features.md`.
+- `skills/README.md` — the composition pattern.
+- `skills/oracle-aidb-docker-setup/SKILL.md`
+- `skills/langchain-oracledb-helper/SKILL.md`
+- `skills/oracle-mcp-server-helper/SKILL.md`
+- All of `shared/references/` — yes all of them. The advanced tier can touch every feature.
 - `advanced/project-ideas.md`.
 
 ## Step 1 — Interview
 
-Run `shared/interview.md` plus the advanced-only questions below.
+Run `shared/interview.md` plus the advanced-only questions.
 
-- Q4 (Inference) — recommend OCI GenAI for the "polished demo" feel; allow Ollama for the air-gapped variant. Discourage BYO unless the user has a reason.
-- Q6 (Notebook) — yes, **mandatory**. Reject "no" — advanced is where notebook payoff lives.
-- **Q7 (advanced-only) — Which features?** From `visual-oracledb-features.md`. The user must pick at least:
-  - Vector search (always — it's how everything talks).
-  - Agent memory tables (always — it's the "DB-as-only-store" core).
-  - **At least one of**: JSON Duality, Property Graph, ONNX in-DB embeddings.
-- **Q8 (advanced-only) — Demo focus?** "Polished UI demo" / "Notebook deep-dive" / "Both" — affects how much Gradio polish vs notebook narrative the skill produces.
+- **Q3 (DB target)** — local Docker default.
+- **Q4 (Inference)** — *not optional*. **OCI GenAI** for chat (`grok-4` in `us-chicago-1`, Pattern 1 SigV1 auth). **In-DB ONNX** for embeddings (`MY_MINILM_V1`, 384 dim). The skill scaffolds the export/register pipeline.
+- **Q5 (Topic)** — one of three from `advanced/project-ideas.md`. Map free-text pitches; default to idea 1 (NL2SQL + doc-RAG hybrid analyst).
+- **Q6 (Notebook)** — yes, **mandatory**. Reject "no" — advanced is where notebook payoff lives.
+- **Q7 (advanced-only) — sql_mode for MCP?** — `read_only` (default; ideas 1 + 2). **Idea 3 (conversational schema designer) requires `read_write`** and an explicit confirmation captured in writing — surface in the README as a callout.
+- **Q8 (advanced-only) — Demo focus?** "Polished UI demo" / "Notebook deep-dive" / "Both" — affects how much Open WebUI vs notebook narrative the skill produces.
 
-For idea 4 ("Translate-this-toy-agent"): also ask for the source repo path / URL. The skill reads it before continuing.
+Print confirmation block. Wait for `y`.
 
 ## Step 2 — Resolve choices
 
-Spec dict has the standard fields plus:
-
 | Variable | Source |
 | --- | --- |
-| `feature_set` | answers to Q7; subset of {`vector`, `hybrid`, `memory`, `json_duality`, `property_graph`, `onnx_in_db`} |
-| `memory_types` | always all 6 (conversational, KB, workflow, toolbox, entity, summary) |
-| `forbidden_imports` | hardcoded — verify greps for these |
-| `notebook_focus` | `polished_ui` / `deep_dive` / `both` from Q8 |
+| `project_slug` | derived from chosen idea |
+| `package_slug` | snake_case |
+| `embedder` | `in-db-onnx` |
+| `embedding_dim` | 384 |
+| `onnx_model_local_id` | `sentence-transformers/all-MiniLM-L6-v2` |
+| `onnx_model_db_name` | `MY_MINILM_V1` |
+| `llm_model` | `grok-4` (or fallback) |
+| `collections` | per-idea (see below) |
+| `mcp_sql_mode` | per-idea: 1 = `read_only`, 2 = `read_only`, 3 = `read_write` (with explicit y) |
+| `mcp_allowed_tools` | per-idea (see below) |
+| `forbidden_imports` | hardcoded — `verify.py` greps for these |
+| `notebook_focus` | from Q8 |
 
-Embedding-dim consistency check — same as intermediate, but additionally validate against the column dim if ONNX in-DB is selected (must match the registered ONNX model's output, e.g. 384 for MiniLM-L6-v2).
+Per-idea collections + tools:
+
+| Idea | Collections | MCP allowed_tools |
+| --- | --- | --- |
+| 1 (hybrid analyst) | `[GLOSSARY, RUNBOOKS, DECISIONS, CONVERSATIONS]` | `[list_tables, describe_table, run_sql, vector_search]` |
+| 2 (self-improving research agent) | `[TOOL_RUNS, SESSION_SUMMARIES, FINDINGS, CONVERSATIONS]` | `[list_tables, describe_table, run_sql, vector_search]` |
+| 3 (conversational schema designer) | `[DESIGN_HISTORY, CONVERSATIONS]` | `[list_tables, describe_table, describe_schema, run_sql]` (read_write) |
 
 ## Step 3 — Scaffold
 
-Order matters; later modules depend on earlier ones.
+### 3a — Foundation via building-block skills
 
-### 3a — Foundation (always)
+1. Refuse if `target_dir` is non-empty.
+2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
+3. Append the **Open WebUI** service to the generated compose file (same as beginner / intermediate).
+4. **Run the ONNX export + register pipeline.** Same as intermediate Step 3a-4: copy `pipeline.py` and `loader.py` from `~/git/personal/onnx2oracle/`, run them once. Smoke `VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test')`.
+5. **Invoke `skills/langchain-oracledb-helper`.** Pass `embedder=in-db-onnx`, the per-idea collections, `has_chat_history=True`. Block until OK.
+6. **Invoke `skills/oracle-mcp-server-helper`.** Pass the per-idea `sql_mode` and `allowed_tools`. For idea 3, the helper will refuse to proceed silently — capture the explicit user `y` before invoking.
 
-1. `target_dir/` — refuse if non-empty.
-2. `.gitignore` — `.env`, `__pycache__/`, `.venv/`, `*.pyc`, `data/`, `notebook-checkpoints/`.
-3. `docker-compose.yml` — from template.
-4. `.env.example` + `.env` — generate ORACLE_PWD; OCI section enabled by default.
-5. `pyproject.toml` — deps:
-   - Always: `oracledb>=2.4`, `langchain-oracledb>=0.1`, `langchain>=0.3`, `gradio>=4.0`, `python-dotenv>=1.0`, `pydantic>=2`.
-   - OCI: `oci>=2.130`, `langchain-openai>=0.2`.
-   - ONNX in-DB (if selected): `optimum[onnxruntime]`, `onnxruntime>=1.18`, `onnxruntime-extensions`, `transformers`, `torch`.
-6. `migrations/` — numbered `.sql` files. Run them in order on first boot.
-   - `001_core.sql` — entity/document tables, vector columns.
-   - `002_memory.sql` — 6 memory tables from `apps/finance-ai-agent-demo/backend/memory/manager.py`. Cite that file at the top.
-   - `003_<feature>.sql` per selected feature:
-     - `003_json_duality.sql` — schema + view from `json-duality.md`.
-     - `003_property_graph.sql` — entity + edge tables.
-     - `003_onnx_dir.sql` — `CREATE DIRECTORY` + grants for ONNX model loading.
+### 3b — Per-idea memory & app code
 
-### 3b — Inference and storage
+Write only the files specific to the chosen idea. Order: migrations → memory adapters → app code → adapter → notebook.
 
-7. `src/<package>/inference.py` — embedder + LLM factories per `oci-genai-openai.md` and `langchain-oracledb.md`. For OCI: scaffold Pattern 1 (`oci-openai` SDK + `oci.signer.Signer`) — Pattern 2 (bare bearer token) only if user explicitly opts in. If ONNX in-DB selected, also expose `InDBEmbeddings` from `onnx-in-db-embeddings.md`.
-8. `src/<package>/store.py` — `OracleVS` multi-collection wrapper. Metadata-as-string monkeypatch. Cite `apps/agentic_rag/src/OraDBVectorStore.py:1-100`.
+#### Idea 1 — Hybrid analyst
 
-### 3c — Memory layer (always)
+7. `migrations/100_seed_dummy.sql` — same fake schema as intermediate idea 1 (10 tables, ~50K rows via Faker).
+8. `src/<package_slug>/router.py` — turn classifier. Two-step: small Grok call ("is this a data question, a knowledge question, or both?") → routes to SQL family / vector family / both. ~80 LOC.
+9. `src/<package_slug>/agent.py` — tool-calling agent. Tools = MCP tools. The router's classification becomes a system-prompt hint that shapes which tool the agent picks first.
+10. `src/<package_slug>/ingest.py` — walks `data/` subdirs (`runbooks/`, `glossary/`, `decisions/`), embeds via in-DB `VECTOR_EMBEDDING`, inserts into the matching collection.
+11. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions`, streams agent events.
 
-9. `src/<package>/memory/manager.py` — port the 6-memory-type pattern from `apps/finance-ai-agent-demo/backend/memory/manager.py:1-100`. Each memory type gets `write_*`, `read_*`, `search_*` methods. All vector-searchable where it makes sense. The conversational-memory table doubles as the backing table for the `OracleChatHistory` class from `langchain-oracledb.md` — wire `RunnableWithMessageHistory` against it. Do NOT import from `langchain_oracledb.chat_message_histories` (doesn't exist).
-10. `src/<package>/memory/entity.py` — entity-memory pattern from `sprawl_manager.py` (people/places/topics with embeddings).
-11. `src/<package>/memory/event_log.py` — tool-execution + reasoning log from `apps/agentic_rag/src/OraDBEventLogger.py`.
+#### Idea 2 — Self-improving research agent
 
-### 3d — Per-feature modules (one per Q7 selection)
+7. `migrations/100_tool_registry.sql` — relational `TOOL_REGISTRY (tool_name, signature, last_used, success_count, fail_count)`.
+8. `src/<package_slug>/memory/toolbox.py` — `register_tool`, `mark_success`, `mark_fail`, `recommend_next` (SQL queries).
+9. `src/<package_slug>/memory/log.py` — `append(tool, args, result, score)` writes to `TOOL_RUNS` (`OracleVS`) with embedding via `VECTOR_EMBEDDING`. `retrieve_similar(query)` uses `vector_search`.
+10. `src/<package_slug>/memory/summary.py` — `write_summary(session_id, text)` writes to `SESSION_SUMMARIES`. `retrieve_summaries(query)` for cold-start retrieval at session boot.
+11. `src/<package_slug>/tools/web_fetch.py` — small tool that does `httpx.get` + `trafilatura.extract`. Logged via `memory.log.append`.
+12. `src/<package_slug>/agent.py` — planner-executor loop:
+    ```python
+    summaries = memory.summary.retrieve(task)  # cold-start
+    state = {"task": task, "history": summaries, "step": 0}
+    while not done(state):
+        relevant_runs = memory.log.retrieve_similar(state["task"])
+        plan = grok.plan(state, relevant_runs)
+        result = execute_tool(plan.tool, plan.args)
+        memory.log.append(plan.tool, plan.args, result, score(result))
+        memory.toolbox.mark_success_or_fail(plan.tool, ...)
+        state = update(state, result)
+    memory.summary.write_summary(session_id, summarize(state))
+    ```
+13. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions` with streaming, exposes "task plan" + "tool calls" + "summary" as separate event types in the SSE stream so Open WebUI can render the agent's reasoning.
 
-- **JSON Duality** → `src/<package>/duality.py`. Write-through JSON helpers + relational read helpers. Cite `~/git/work/demoapp/api/app/routers/json_views.py:1-80`.
-- **Property Graph** → `src/<package>/graph.py`. Entity/edge writers + Python BFS for n-hop. Cite `~/git/work/demoapp/api/app/routers/graph.py:1-80`.
-- **ONNX in-DB** → `src/<package>/onnx_loader.py` — wraps the pipeline + loader from `onnx2oracle/`. Skill copies `pipeline.py` and `loader.py` from `~/git/personal/onnx2oracle/src/onnx2oracle/` into the user's project (with attribution comment).
+#### Idea 3 — Conversational schema designer
 
-### 3e — Agent loop and UI
+7. `migrations/100_design_history.sql` — `DESIGN_HISTORY (id, ddl, rationale, run_at, success)`.
+8. `src/<package_slug>/migrations.py` — wraps every DDL the agent emits into a `DESIGN_HISTORY` row + executes it via `run_sql` MCP tool. Replay-capable: rerun `DESIGN_HISTORY` rows in order on a fresh DB.
+9. `src/<package_slug>/duality.py` — JSON Duality view generator. Takes a list of base tables + relationships, emits `CREATE OR REPLACE JSON RELATIONAL DUALITY VIEW ... WITH INSERT UPDATE DELETE`. Validator checks the generated view loads without error before committing it to history.
+10. `src/<package_slug>/seeder.py` — NL "seed it with 5 fake customers, each with 1-3 commissions" → grok generates `INSERT` statements → run via MCP. Captured in history.
+11. `src/<package_slug>/agent.py` — conversation loop with **confirmation gating**: every DDL the agent wants to run is surfaced as a structured event in the SSE stream; the adapter holds the SQL until the UI POSTs back to `/confirm/<request_id>`. Open WebUI's tool-output rendering is enough — no custom frontend needed.
+12. `src/<package_slug>/adapter.py` — FastAPI; supports the confirm endpoint plus standard `/v1/chat/completions`.
 
-12. `src/<package>/tools.py` — tool registry. Each tool registered, every call logged via `event_log`. No filesystem state.
-13. `src/<package>/agent.py` — main loop: retrieve (vector + optional graph hop) → reason (LLM) → act (tool call) → reflect → write to memory. Pure Python, no LangGraph (keeps the dependency surface honest at this scope).
-14. `src/<package>/app.py` — Gradio with multiple tabs:
-    - **Chat** — main agent interface.
-    - **Memory** — browse the 6 memory types.
-    - **Per-feature tabs** — for each Q7 selection (Duality dashboard, Graph viewer, etc).
-15. `gradio_app.py` — entrypoint.
+### 3c — Verify, notebook, README (all ideas)
 
-### 3f — Tests, notebook, README
-
-16. `verify.py` — from template, with the **advanced extension** from `shared/verify.md`:
-    - Round-trip each of the 6 memory tables.
-    - Grep the project for `forbidden_imports` (`redis`, `psycopg`, `psycopg2`, `sqlite3`, `chromadb`, `qdrant_client`, `pinecone`, `faiss`). Fail if any found.
-    - For each Q7 feature, run a feature-specific smoke (e.g. JSON Duality → write-then-read-relationally; graph → 2-hop BFS).
-17. `notebook.ipynb` — mandatory. Structure depends on Q8:
-    - `polished_ui` focus → 8 cells, last cell launches Gradio.
-    - `deep_dive` focus → 12-15 cells, walks every feature with prose.
-    - `both` → 12-15 cells, last cell launches Gradio.
-18. `README.md` — from template. The "Why Oracle" paragraph is assembled from `visual-oracledb-features.md` entries matching the user's `feature_set`. Include a "DB-as-only-store proof" callout pointing at the verify forbidden-import grep.
+13. `verify.py` — fill template:
+    - `inference_enabled = True`.
+    - Round-trip ONNX dim (== 384).
+    - Smoke MCP tools list.
+    - **Forbidden-imports grep:** `grep -RE 'import (redis|psycopg|psycopg2|sqlite3|chromadb|qdrant_client|pinecone|faiss)' src/`. Non-empty output = fail.
+    - Per-idea smoke:
+      - 1: ingest the seed schema, ask "what was Q3 revenue?"; assert SQL ran.
+      - 2: empty-task run + memory write + memory retrieve roundtrip.
+      - 3: dry-run a `CREATE TABLE customers (...)` through the agent — assert it lands in `DESIGN_HISTORY` without executing.
+14. `notebook.ipynb`:
+    - `polished_ui` focus → 8 cells, last launches the adapter (and you open WebUI manually).
+    - `deep_dive` focus → 12-15 cells per idea, walks every component (memory, MCP, agent loop, ONNX SQL).
+    - `both` → 12-15 cells, last launches.
+    Cells must execute clean via `jupyter nbconvert --execute`.
+15. `README.md` — the "Why Oracle" paragraph names: in-DB ONNX, vector + relational + JSON Duality + property graph (idea 1 references the agentic_rag-style 6-memory pattern; ideas 2 + 3 use specific subsets), MCP server. Include a **"Skills composition" diagram** (mermaid) showing the three skills feeding into the project. Include the "DB-as-only-store proof" callout pointing at the verify forbidden-imports grep.
 
 ## Step 4 — Verify
 
-1. `docker compose up -d --wait`.
-2. Apply `migrations/*.sql` in order. Stop on first error.
-3. `python verify.py` — must print `verify: OK (db, vector, inference, memory, <features>)`.
-4. **Advanced extra**: `verify.py` greps for forbidden imports. If found, fail and tell the user which file violates the rule.
-5. Run the notebook end-to-end (`jupyter nbconvert --to notebook --execute notebook.ipynb`). It must complete without errors.
-6. On any failure, follow `shared/verify.md` recovery loop. Max 3 retries before stopping.
+1. DB up (skill 1 ensured).
+2. ONNX registered (step 3a-4).
+3. `python -m pip install -e .`
+4. `python verify.py`. Expect `verify: OK (db, vector, inference, mcp, memory, no_forbidden_imports)`.
+5. Run the notebook clean.
+6. Boot adapter, hit `/v1/models`, kill it.
+7. On any failure, follow `shared/verify.md` recovery loop, max 3 retries.
 
 ## Step 5 — Polish for sharing
 
 1. README placeholders filled.
-2. `docs/` directory with placeholders for the demo GIF, screenshot of the Gradio UI's per-feature tabs, and a "DB-as-only-store" architecture diagram (skill leaves a note: use mermaid/excalidraw).
-3. Boot Gradio once in background, confirm `localhost:7860` responds, kill it.
-4. Final report:
+2. `docs/` — placeholders for: demo GIF, screenshot of Open WebUI, mermaid skills-composition diagram.
+3. Final report:
    ```
    Done.
      project at:    <target_dir>
-     features used: vector, memory, <feature_set>
-     run with:      cd <target_dir> && python gradio_app.py
-     verify:        OK
+     features used: in-DB ONNX, OracleVS multi-collection, OracleChatHistory, oracle-database-mcp-server, <idea-specific>
+     skills used:   oracle-aidb-docker-setup, langchain-oracledb-helper, oracle-mcp-server-helper
+     run with:      cd <target_dir>
+                    docker compose up -d
+                    python -m <pkg>.adapter   # blocks; Open WebUI on :3000
+     verify:        OK (no forbidden imports)
      notebook:      <target_dir>/notebook.ipynb (executed clean)
      proof:         no Redis/Postgres/SQLite/Chroma/etc — verified by grep.
-     next:          record demo, fill "What I built", architecture diagram, push.
+     next:          record 2-3 min demo, fill "What I built", architecture diagram, push.
    ```
 
 ## Stop conditions
 
-- User declines the "Oracle is the only store" constraint. The advanced path doesn't make sense without it; offer them the intermediate path instead.
-- User picks fewer features than the minimum set (vector + memory + ≥1 advanced feature).
-- Notebook execution fails after 3 retries.
-- Verify fails after 3 retries.
-- ONNX selected but the chosen model uses SentencePiece. Stop with a clear error.
-- Idea 4 selected but the source repo doesn't have a clear storage layer to translate. Stop and ask.
+- User declines OCI GenAI (no tenancy / cost concern). Tell them this tier requires it.
+- User declines the Oracle-as-only-store constraint. Suggest intermediate path instead.
+- ONNX model registers but dim ≠ 384. Drop, surface error, stop.
+- Idea 3 picked but user won't confirm `read_write` MCP. Default to read_only blocks idea 3 — pick a different idea.
+- Verify fails 3 times.
+- Notebook fails to execute 3 times.
 
 ## What you must NOT do
 
-- Don't add Redis. Don't add Postgres. Don't add SQLite. Don't add Chroma / FAISS / Qdrant / Pinecone. Don't write to a filesystem JSON file as state. Verify will catch you.
+- Don't add Redis. Don't add Postgres. Don't add SQLite. Don't add Chroma / FAISS / Qdrant / Pinecone. Don't write to a filesystem JSON file as state. `verify.py` will catch you.
 - Don't make memory ephemeral (in-process dicts). All state in DB.
-- Don't pick a feature the user didn't ask for. The Q7 set is the contract.
+- Don't write `OracleVS` boilerplate yourself — `langchain-oracledb-helper` did it.
+- Don't write `oracle-database-mcp-server` boilerplate yourself — `oracle-mcp-server-helper` did it.
+- Don't write `docker-compose.yml` for Oracle yourself — `oracle-aidb-docker-setup` did it.
 - Don't ship without the executed notebook. Mandatory.
 - Don't claim done before verify *and* notebook execution are both green.
-- Don't use recursive WITH for bidirectional graphs. Use Python BFS over an adjacency table per `property-graph.md`.
-- Don't try to register a SentencePiece-tokenized ONNX model. It loads then fails on inference. Stay on BertTokenizer-family models.
+- Don't use recursive WITH for bidirectional graphs in idea 1 if you reach for the agentic_rag 6-memory pattern. Use Python BFS over an adjacency table.
+- Don't try to register a SentencePiece-tokenized ONNX model. BertTokenizer family only.
+- Don't expose `run_sql` in `read_write` mode without surfacing the safety warning in the project README.
