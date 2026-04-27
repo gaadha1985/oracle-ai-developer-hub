@@ -2,7 +2,7 @@
 name: choose-your-path-beginner
 description: Scaffold a small RAG chatbot on Oracle 26ai Free + langchain-oracledb + OCI Generative AI Grok 4 + sentence-transformers MiniLM-L6-v2 (Python-side embeddings, same model intermediate/advanced register inside Oracle) + Open WebUI. Three flavors that share one skeleton — PDF / Markdown / Web. For users new to Oracle who want a polished demo running in an afternoon.
 inputs:
-  - target_dir: where to scaffold (default ~/git/personal/<slug>)
+  - target_dir: where to scaffold (default = current working directory; ask if it isn't empty)
   - topic: optional; one of beginner/project-ideas.md, or a free-text pitch
 ---
 
@@ -47,7 +47,7 @@ Build a scaffold spec from the interview:
 | --- | --- |
 | `project_slug` | derived from topic, kebab-case: `pdf-chat`, `notes-chat`, `web-chat` |
 | `package_slug` | snake_case: `pdf_chat`, `notes_chat`, `web_chat` |
-| `target_dir` | from Q2 or `~/git/personal/<project_slug>` |
+| `target_dir` | from Q2; default = current working directory. Never assume a host-specific layout. |
 | `embedder` | `minilm-py` (always) |
 | `embedding_dim` | 384 |
 | `embedding_model_id` | `sentence-transformers/all-MiniLM-L6-v2` |

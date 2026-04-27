@@ -18,7 +18,7 @@ This tier deliberately moves off external embedding APIs and onto **`VECTOR_EMBE
 | **No process to babysit** | No Ollama, no Cohere quota, no DashScope rate limit, no `nomic-embed-text` daemon. The DB is the embedder. |
 | **Pure-SQL vector search** | `SELECT id FROM docs ORDER BY VECTOR_DISTANCE(embedding, VECTOR_EMBEDDING(MODEL USING :q), COSINE) FETCH FIRST 5 ROWS` works without Python. The MCP server's `vector_search` tool literally executes this. |
 
-The trade: a one-time pipeline cost (HF → ONNX export → opset-14 → wrap with tokenizer → `LOAD_ONNX_MODEL`). The skill scaffolds this from `~/git/personal/onnx2oracle/`. After the registration, the user's app code calls `embed_query(...)` and the `Embeddings` subclass turns into one SQL statement.
+The trade: a one-time pipeline cost (HF → ONNX export → opset-14 → wrap with tokenizer → `LOAD_ONNX_MODEL`). The skill scaffolds this from `shared/snippets/onnx_loader.py` plus the export pattern documented in `shared/references/onnx-in-db-embeddings.md`. After the registration, the user's app code calls `embed_query(...)` and the `Embeddings` subclass turns into one SQL statement.
 
 **Default model:** `sentence-transformers/all-MiniLM-L6-v2` — 384-dim, BertTokenizer (Oracle's `onnxruntime_extensions` only ships Bert), 90MB on disk, fits the free-tier model size cap. Multilingual users can swap to `paraphrase-multilingual-MiniLM-L12-v2` (also Bert tokenizer) at cost of slower throughput.
 

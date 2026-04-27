@@ -18,11 +18,11 @@ Skip Q1 if the user invoked the skill path-specifically (`beginner/SKILL.md` dir
 ## Q2 — Where should the project live?
 
 > **Where on disk should I scaffold this?**
-> Default: `~/git/personal/<slug>` where `<slug>` is auto-derived from the project topic (Q5).
+> Default: the current working directory the agent was launched in. The skill **does not** assume a host-specific path layout (no `~/git/personal/...`, no `~/projects/...`, etc.) — that's the user's call.
 >
-> *Why: I don't want to drop files in the wrong place. Bail out and ask if `<slug>` already exists.*
+> *Why: I don't want to drop files in the wrong place. Bail out and ask if the target dir already exists and isn't empty.*
 
-If the target dir exists and isn't empty, the skill asks before proceeding (don't overwrite, don't merge silently).
+If the target dir exists and isn't empty, the skill asks before proceeding (don't overwrite, don't merge silently). If the user passes a relative path, resolve it against the current working directory, not against any default base.
 
 ## Q3 — Database target
 
@@ -76,7 +76,7 @@ After all questions, the skill prints back:
 ```
 About to scaffold:
   path:        intermediate
-  target_dir:  ~/git/personal/nl2sql-explorer
+  target_dir:  ./nl2sql-explorer  (resolved to absolute path before scaffolding)
   database:    local docker (26ai Free)
   inference:   OCI GenAI Grok 4 (us-chicago-1)
                + in-DB ONNX embeddings (MY_MINILM_V1, 384d)

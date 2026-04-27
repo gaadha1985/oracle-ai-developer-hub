@@ -81,17 +81,6 @@ All three tiers use the **same embedding model** — `sentence-transformers/all-
 
 Keeping one model across tiers means: same dim, same tokenizer, same chunk-size sweet spot. A user who builds the beginner project then the intermediate one doesn't re-tune anything — they migrate the *same corpus* and watch the embedding step move from Python into SQL.
 
-### Why MiniLM and not Cohere
-
-Cohere `embed-english-v3.0` (1024 dim) is meaningfully better on retrieval benchmarks (MTEB English ~64.5 vs MiniLM's ~56.5, multilingual support, longer context). On a hard benchmark you'd pick Cohere. We don't, because:
-
-- **Pedagogical consistency wins.** One model, one dim, across all three tiers means the only thing changing between tiers is the Oracle feature being highlighted.
-- **No external embedding API.** Beginner doesn't need a Cohere endpoint, an OCI compartment for embeddings, or per-token billing. It needs `pip install`.
-- **Same model registers cleanly inside Oracle.** Cohere doesn't ship as ONNX, so it can't be the in-DB embedder. Picking MiniLM at tier 1 means tier 2 is a *migration*, not a swap.
-- **MiniLM is good enough for the demo shape.** ~80-token chunks of PDFs / markdown notes / web articles is exactly the corpus shape MiniLM was trained on. The recall ceiling matters less for a 30-second demo than the bring-up cost.
-
-If a user later wants Cohere, the `langchain-oracledb-helper` skill accepts `embedder=oci-cohere` as an alternate input — they re-bootstrap with the new dim. We just don't default to it.
-
 ### Why in-DB ONNX matters (for intermediate / advanced)
 
 - **Zero embedding round-trips on insert.** Bulk loads run an order of magnitude faster than the embed-then-bind Python pattern.
@@ -100,7 +89,7 @@ If a user later wants Cohere, the `langchain-oracledb-helper` skill accepts `emb
 - **No second process to babysit.** No `sentence-transformers` Python process holding GPU/CPU memory; the DB is the embedder.
 - **Pure-SQL vector search.** The MCP server's `vector_search` tool is one SQL statement.
 
-The one-time cost: an export pipeline (HF → ONNX, opset 14, BertTokenizer wrap, `LOAD_ONNX_MODEL`). The skill scaffolds this from `~/git/personal/onnx2oracle/` so the user doesn't write any of it.
+The one-time cost: an export pipeline (HF → ONNX, opset 14, BertTokenizer wrap, `LOAD_ONNX_MODEL`). The skill scaffolds this from the local `shared/snippets/onnx_loader.py` plus the documented export pattern in `shared/references/onnx-in-db-embeddings.md` so the user doesn't write any of it.
 
 ---
 

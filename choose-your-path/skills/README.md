@@ -32,7 +32,9 @@ This is not just DRY for its own sake — it lets the advanced project be **smal
 
 Each skill works without the choose-your-path harness. From any directory:
 
-> Read `/home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/skills/<skill-name>/SKILL.md` and follow it.
+> Read `<your-hub-checkout>/choose-your-path/skills/<skill-name>/SKILL.md` and follow it.
+
+Replace `<your-hub-checkout>` with the absolute path to wherever you cloned the [oracle-ai-developer-hub](https://github.com/oracle-devrel/oracle-ai-developer-hub) repo on your machine.
 
 The skill will ask its own inputs and run its own steps. Useful when you want to bolt the Oracle layer onto an existing app instead of scaffolding from zero.
 

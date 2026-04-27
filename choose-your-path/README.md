@@ -43,7 +43,7 @@ Because building "your first Oracle vector query" and "an agent system using Ora
 
 ## Where projects land
 
-By default: `~/git/personal/<project-slug>` — outside this repo, so what you build is **yours**, not a fork of the developer hub. You take the repo, you push it to your own GitHub, you post the demo. The skill credits the developer hub in the generated README footer; that's the only attribution.
+By default: the current working directory you launched your agent in. The skill never picks a path on its own; it scaffolds where you point it. We recommend a fresh empty directory **outside** this repo so what you build is **yours**, not a fork of the developer hub. You take the repo, you push it to your own GitHub, you post the demo. The skill credits the developer hub in the generated README footer; that's the only attribution.
 
 ## See also
 

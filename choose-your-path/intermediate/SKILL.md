@@ -2,7 +2,7 @@
 name: choose-your-path-intermediate
 description: Scaffold a Grok-4 tool-calling agent over an Oracle schema using langchain-oracledb + oracle-database-mcp-server + in-DB ONNX embeddings (registered MiniLM model, no external embedding API) + Open WebUI. For users who've built RAG before and want to rebuild it on the production-feeling Oracle stack.
 inputs:
-  - target_dir: where to scaffold (default ~/git/personal/<slug>)
+  - target_dir: where to scaffold (default = current working directory; ask if it isn't empty)
   - topic: optional; one of intermediate/project-ideas.md, or a free-text pitch
 ---
 
@@ -67,8 +67,8 @@ Order matters: building-block skills first, then project code.
 2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
 3. Append the **Open WebUI** service to the generated `docker-compose.yml` (same as beginner SKILL step 3a-3).
 4. **Run the ONNX export + register pipeline** *before* invoking the langchain helper, since the helper's dim assertion needs the model registered:
-   - Copy `~/git/personal/onnx2oracle/src/onnx2oracle/pipeline.py` to `target_dir/scripts/onnx_export.py` (with attribution at top).
-   - Copy `~/git/personal/onnx2oracle/src/onnx2oracle/loader.py` to `target_dir/scripts/onnx_load.py`.
+   - **Export**: write `target_dir/scripts/onnx_export.py` from the canonical pattern in `shared/references/onnx-in-db-embeddings.md` (the `optimum.onnxruntime` snippet at the top of that doc, plus `onnxruntime_extensions` BertTokenizer wrapping per the same file). Pin `opset=14`. Output: `target_dir/onnx_model/all-MiniLM-L6-v2.onnx`.
+   - **Register**: copy `shared/snippets/onnx_loader.py` to `target_dir/scripts/onnx_load.py` (with citation header pointing at the snippet). The snippet wraps `DBMS_VECTOR.LOAD_ONNX_MODEL` with idempotency.
    - Run them once: `python scripts/onnx_export.py` then `python scripts/onnx_load.py` — outputs `MY_MINILM_V1` registered in the DB.
    - Smoke: `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual` returns a 384-vector. If not, stop and surface the loader error.
 5. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=in-db-onnx` (the helper writes the `InDBEmbeddings` subclass), `collections=...`, `has_chat_history=True`. Block until OK.

@@ -8,7 +8,7 @@ The post-restructure skill set is **OCI-Generative-AI-only** for the LLM (Grok 4
 
 ## Once-only setup (do this before any walk-through)
 
-Four things on your machine:
+Five things on your machine:
 
 1. **Docker** — to run Oracle 26ai Free locally. Verify: `docker --version`.
 2. **Python 3.11+** with `conda` (or `venv`). Verify: `python --version`.
@@ -22,10 +22,16 @@ Four things on your machine:
    ```bash
    export OCI_COMPARTMENT_ID=ocid1.compartment.oc1..xxxx
    ```
+5. **The developer-hub repo cloned somewhere.** The walk-throughs reference `SKILL.md` files inside it. Pick a path you'll remember:
+   ```bash
+   git clone https://github.com/oracle-devrel/oracle-ai-developer-hub.git
+   export HUB=$(pwd)/oracle-ai-developer-hub                  # or wherever you put it
+   ```
+   The walk-throughs below use `$HUB` as a stand-in. Replace it with your actual path when you paste, or `export` the variable in your shell as shown.
 
 That's it. Oracle is started by the skill (it scaffolds `docker-compose.yml`); no separate install. Open WebUI is added to the compose file too — also no separate install.
 
-> Each walk-through assumes you opened a fresh `claude` session in an empty project directory. The skill will scaffold *into* that directory, not into the hub repo.
+> Each walk-through assumes you opened a fresh `claude` session in an empty project directory of your choice. The skill will scaffold *into* the current working directory, not into the hub repo.
 
 ---
 
@@ -36,7 +42,7 @@ What you'll have at the end: drop PDFs in `data/pdfs/`, get a chat UI in Open We
 ### 1. Open Claude Code in an empty project directory
 
 ```bash
-mkdir -p ~/projects/pdf-chat-poc && cd ~/projects/pdf-chat-poc
+mkdir -p ./pdf-chat-poc && cd ./pdf-chat-poc            # or anywhere outside $HUB
 claude
 ```
 
@@ -44,7 +50,7 @@ claude
 
 Paste this exactly:
 
-> Read `/home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/SKILL.md` and follow it.
+> Read `$HUB/choose-your-path/SKILL.md` and follow it.
 
 Claude reads the top-level router, then asks "which path?" — answer `1` (beginner). It hands off to `beginner/SKILL.md`, which reads the references, then runs the interview.
 
@@ -106,7 +112,7 @@ What you'll have: a Grok-4 tool-calling agent that talks to a real Oracle schema
 ### 1. New empty directory
 
 ```bash
-mkdir -p ~/projects/nl2sql-poc && cd ~/projects/nl2sql-poc
+mkdir -p ./nl2sql-poc && cd ./nl2sql-poc                # or anywhere outside $HUB
 claude
 ```
 
@@ -114,7 +120,7 @@ claude
 
 Same paste as before:
 
-> Read `/home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/SKILL.md` and follow it.
+> Read `$HUB/choose-your-path/SKILL.md` and follow it.
 
 Answer `2` (intermediate) at the dispatch.
 
@@ -179,14 +185,14 @@ What you'll have: a production-feeling analyst that answers data questions via S
 ### 1. New empty directory
 
 ```bash
-mkdir -p ~/projects/hybrid-analyst-poc && cd ~/projects/hybrid-analyst-poc
+mkdir -p ./hybrid-analyst-poc && cd ./hybrid-analyst-poc  # or anywhere outside $HUB
 claude
 ```
 
 ### 2. Invoke the skill
 
 ```
-Read /home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/SKILL.md and follow it.
+Read $HUB/choose-your-path/SKILL.md and follow it.
 ```
 
 Answer `3` (advanced).
@@ -287,7 +293,7 @@ Same flow. At Q5, pick a different number from `choose-your-path/{beginner,inter
 
 You can. For example, to bring up Oracle 26ai Free in any project (without the rest of the choose-your-path scaffold):
 
-> Read `/home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/skills/oracle-aidb-docker-setup/SKILL.md` and follow it.
+> Read `$HUB/choose-your-path/skills/oracle-aidb-docker-setup/SKILL.md` and follow it.
 
 The skill asks its own inputs, runs its own steps, and reports back. Useful when you're bolting Oracle onto an existing app.
 
@@ -297,7 +303,7 @@ The skill asks its own inputs, runs its own steps, and reports back. Useful when
 
 ```
 1. mkdir empty-dir && cd empty-dir && claude
-2. "Read /home/ubuntu/git/work/oracle-ai-developer-hub/choose-your-path/SKILL.md and follow it."
+2. "Read $HUB/choose-your-path/SKILL.md and follow it."
 3. Answer 6-8 questions:
      - path:        beginner | intermediate | advanced
      - target_dir:  .

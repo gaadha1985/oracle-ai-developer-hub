@@ -2,7 +2,7 @@
 name: choose-your-path-advanced
 description: Scaffold an agent system where Oracle AI DB is the *only* state store, composed from the choose-your-path/skills/ building-block library. Stack — langchain-oracledb + oracle-database-mcp-server + in-DB ONNX embeddings + OCI GenAI Grok 4 + Open WebUI. Three projects — production-feeling NL2SQL+RAG hybrid analyst, self-improving research agent, conversational schema designer. For users who want a real DB-as-only-store agent demo.
 inputs:
-  - target_dir: where to scaffold (default ~/git/personal/<slug>)
+  - target_dir: where to scaffold (default = current working directory; ask if it isn't empty)
   - topic: optional; one of advanced/project-ideas.md, or a free-text pitch within the constraint
 ---
 
@@ -65,7 +65,7 @@ Per-idea collections + tools:
 1. Refuse if `target_dir` is non-empty.
 2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
 3. Append the **Open WebUI** service to the generated compose file (same as beginner / intermediate).
-4. **Run the ONNX export + register pipeline.** Same as intermediate Step 3a-4: copy `pipeline.py` and `loader.py` from `~/git/personal/onnx2oracle/`, run them once. Smoke `VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test')`.
+4. **Run the ONNX export + register pipeline.** Same as intermediate Step 3a-4: write `scripts/onnx_export.py` from the snippet in `shared/references/onnx-in-db-embeddings.md`, copy `shared/snippets/onnx_loader.py` to `scripts/onnx_load.py`, run both, smoke `VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test')`.
 5. **Invoke `skills/langchain-oracledb-helper`.** Pass `embedder=in-db-onnx`, the per-idea collections, `has_chat_history=True`. Block until OK.
 6. **Invoke `skills/oracle-mcp-server-helper`.** Pass the per-idea `sql_mode` and `allowed_tools`. For idea 3, the helper will refuse to proceed silently — capture the explicit user `y` before invoking.
 
