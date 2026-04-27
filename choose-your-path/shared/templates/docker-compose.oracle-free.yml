@@ -1,0 +1,42 @@
+# Oracle 26ai Free — drop-in for any choose-your-path project.
+# Tested with the official Oracle Container Registry image.
+#
+# Usage:
+#   1. Copy this file to your project root as `docker-compose.yml`.
+#   2. Copy `.env.example` to `.env` and confirm ORACLE_PWD meets the rules
+#      (>=12 chars, >=1 upper, >=1 lower, >=1 digit). The skill generates one
+#      automatically — don't pick a weak one.
+#   3. `docker compose up -d`
+#   4. First boot takes ~120 seconds. The healthcheck blocks `depends_on`
+#      until the DB is actually accepting connections — wait for it.
+#
+# DSN for the Python side: localhost:1521/FREEPDB1
+# EM Express UI:           https://localhost:5500/em (user=SYSTEM, pass=ORACLE_PWD)
+
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-26ai-free
+    restart: unless-stopped
+    ports:
+      - "1521:1521"   # listener (your Python app talks to this)
+      - "5500:5500"   # EM Express (browser UI for poking around)
+    environment:
+      ORACLE_PWD: ${ORACLE_PWD}
+      ORACLE_CHARACTERSET: AL32UTF8
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      # Drop SQL files in ./init-schema/ — Oracle runs them once on first boot,
+      # against FREEPDB1, alphabetically. Used by some skills for seed data.
+      - ./init-schema:/opt/oracle/scripts/startup:ro
+    healthcheck:
+      # `sqlplus -L` returns 0 only when the DB is accepting connections.
+      # The `-L` (no-prompt) flag is what makes this safe in a healthcheck.
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -L SYSTEM/${ORACLE_PWD}@localhost:1521/FREEPDB1 | grep -q '1'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+
+volumes:
+  oracle-data:

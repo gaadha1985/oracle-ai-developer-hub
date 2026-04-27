@@ -1,0 +1,34 @@
+[project]
+name = "{{project_slug}}"
+version = "0.1.0"
+description = "{{one_line_pitch}}"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "{{author}}" },
+]
+dependencies = [
+    "oracledb>=2.4",
+    "langchain-oracledb>=0.1",
+    # Inference deps — the skill picks one set:
+    # Beginner / local: "langchain-ollama>=0.2"
+    # Intermediate OCI: "langchain-openai>=0.2", "oci>=2.130"
+    # Bring-your-own:   "langchain-openai>=0.2"
+    # UI (intermediate / advanced only):
+    # "gradio>=4.0"
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+{{entrypoint_name}} = "{{package_name}}.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
