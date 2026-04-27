@@ -2,7 +2,7 @@
 
 When a skill needs to show a pattern, it cites a real file from this index. No abstract pseudocode, no invented SQL.
 
-Paths starting with `~/` live outside this repo (jasperan's personal/work tree on the local machine). Paths starting with `apps/` are in this repo. The skill's `target_dir` may not have access to `~/` paths — when that's the case, the skill copies the relevant snippet into `shared/snippets/` first, then cites the local copy. (The snippets directory will be added during build step 7.)
+Paths starting with `~/` live outside this repo (jasperan's personal/work tree on the local machine). Paths starting with `apps/` are in this repo. Paths starting with `shared/snippets/` are local copies of the most-cited patterns — when the user's machine doesn't have `~/git/personal/...` checked out, the skill copies from `shared/snippets/` instead. See [`shared/snippets/README.md`](../snippets/README.md) for the index.
 
 ---
 
@@ -97,11 +97,24 @@ Paths starting with `~/` live outside this repo (jasperan's personal/work tree o
 
 ---
 
+## Snippet fallbacks (when `~/` paths aren't available)
+
+The most-cited patterns are mirrored locally so projects don't depend on jasperan's personal tree being on the user's machine:
+
+| Pattern | Snippet | Mirrored from |
+| --- | --- | --- |
+| OracleVS metadata-as-string monkeypatch | `shared/snippets/metadata_monkeypatch.py` | `apps/agentic_rag/src/OraDBVectorStore.py:10-48` |
+| Oracle-backed chat history | `shared/snippets/oracle_chat_history.py` | (first-party — `langchain-oracledb` does not ship a chat-history class) |
+| OCI dual-auth chat client | `shared/snippets/oci_chat_factory.py` | `~/git/personal/oci-genai-service/.../chat.py:1-95` |
+| OCI Cohere embeddings | `shared/snippets/oci_cohere_embeddings.py` | `~/git/personal/oci-genai-service/.../embeddings.py:1-60` |
+| 6-memory-types pattern | `shared/snippets/memory_manager.py` | `apps/finance-ai-agent-demo/backend/memory/manager.py:1-100` |
+| ONNX `LOAD_ONNX_MODEL` registration | `shared/snippets/onnx_loader.py` | `~/git/personal/onnx2oracle/.../loader.py:15-70` |
+| Forbidden-imports list | `shared/snippets/forbidden_imports.txt` | (first-party — kept in sync with `shared/verify.md`) |
+
 ## Gaps the skills must not paper over
 
-- **No clean ONNX in-DB exemplar inside `oracle-ai-developer-hub` itself.** Advanced path cites `~/git/personal/onnx2oracle/`. If the user has only this repo, the skill copies the loader snippet into `shared/snippets/` during build step 7.
-- **No JSON Duality / property-graph exemplars in `~/git/personal/`.** Advanced path cites `~/git/work/demoapp/`. Same snippet-copy fallback applies.
-- **`langchain-oracledb` chat-history class** is referenced in intermediate but not yet exemplified in any of the surveyed code. The skill must point at the package's own README/source for that one until we have a first-party exemplar.
+- **No JSON Duality / property-graph exemplars in `~/git/personal/`.** Advanced path cites `~/git/work/demoapp/`. If the user lacks the path, the skill scaffolds from the worked examples in `json-duality.md` / `property-graph.md` directly. Adding mirror snippets is a future enhancement.
+- **`langchain-oracledb` chat-history class does not exist** as of the latest release — submodules are only `document_loaders`, `embeddings`, `retrievers`, `utilities`, `vectorstores`. The skill MUST scaffold the first-party `OracleChatHistory` from `shared/snippets/oracle_chat_history.py`. Earlier versions of these docs claimed an import path that does not resolve; that has been corrected.
 
 ---
 

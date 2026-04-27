@@ -5,22 +5,51 @@ For intermediate / advanced users who want hosted inference instead of local Oll
 ## Endpoint shape
 
 ```
-https://inference.generativeai.{region}.oci.oraclecloud.com/{path}
-```
-
-For the OpenAI-compat surface specifically:
-
-```
 base_url = "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai"
 ```
 
-Then any OpenAI-compatible client works:
+The endpoint speaks the OpenAI wire format **but does not accept a bearer-token `api_key`** — every request must be signed with OCI Signature V1. `from openai import OpenAI; OpenAI(api_key="oci")` returns 401.
+
+Use one of the two patterns below.
+
+### Pattern 1: `oci-openai` SDK (the right way)
+
+```bash
+pip install oci-openai
+```
+
+```python
+from oci_openai import OciOpenAI
+import oci
+
+config = oci.config.from_file("~/.oci/config", "DEFAULT")
+signer = oci.signer.Signer(
+    tenancy=config["tenancy"],
+    user=config["user"],
+    fingerprint=config["fingerprint"],
+    private_key_file_location=config["key_file"],
+)
+
+client = OciOpenAI(
+    base_url="https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai",
+    auth=signer,
+    compartment_id=os.environ["OCI_COMPARTMENT_ID"],
+)
+resp = client.chat.completions.create(model="grok-4", messages=[...])
+```
+
+`oci-openai` wraps the `openai` Python client and slips the OCI signer onto every request. Same `client.chat.completions.create(...)` surface, but signed.
+
+### Pattern 2: API-key auth (only if your tenancy enables it)
+
+Some OCI tenancies expose a personal-access-style API key for the OpenAI-compat endpoint. If you have one, plain `openai` works:
 
 ```python
 from openai import OpenAI
 client = OpenAI(base_url=BASE_URL, api_key=OCI_API_KEY)
-client.chat.completions.create(model="grok-4", messages=[...])
 ```
+
+If unsure, use Pattern 1 — Signature V1 always works given a valid `~/.oci/config`. Source: `~/git/personal/oci-genai-service/src/oci_genai_service/inference/chat.py:1-95` shows the dual-auth selector pattern.
 
 ## Region matrix (where each model lives)
 

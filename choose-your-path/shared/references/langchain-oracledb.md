@@ -71,23 +71,42 @@ vs.similarity_search("authentication flow", k=5,
                      filter={"source": "auth-handbook.pdf"})
 ```
 
-**The non-negotiable monkeypatch.** Oracle returns metadata as `VARCHAR2`, so without this, `.metadata` is a string-of-JSON instead of a dict. Filtered retrievals silently miss. From `OraDBVectorStore.py`:
+**The non-negotiable monkeypatch.** Oracle returns metadata as `VARCHAR2`, so without this, `.metadata` is a string-of-JSON instead of a dict. Filtered retrievals silently miss. The patch target is the **module-level function** `langchain_oracledb.vectorstores.oraclevs._read_similarity_output`, not a class method — patching the class will silently no-op. Verbatim from `apps/agentic_rag/src/OraDBVectorStore.py:10-48`:
 
 ```python
-import json
-from langchain_oracledb import OracleVS as _OVS
-_orig = _OVS._read_similarity_output
-def _patched(self, results):
-    docs = _orig(self, results)
-    for d, _score in (docs if isinstance(docs[0], tuple) else [(d, 0) for d in docs]):
-        if isinstance(d.metadata, str):
-            try: d.metadata = json.loads(d.metadata)
-            except Exception: pass
-    return docs
-_OVS._read_similarity_output = _patched
+# --- MONKEYPATCH BEGIN ---
+# Fix for AttributeError: 'str' object has no attribute 'pop'.
+# OracleVS expects metadata as dict, but VARCHAR2/JSON storage returns a
+# string via oracledb. Pre-parse it to a dict before the library sees it.
+try:
+    import json
+    import langchain_oracledb.vectorstores.oraclevs as vs_module
+
+    _orig = vs_module._read_similarity_output
+
+    def _fixed_read_similarity_output(results, has_similarity_score=False, has_embeddings=False):
+        fixed = []
+        for row in results:
+            if len(row) >= 2:
+                row_list = list(row)
+                metadata = row_list[1]
+                if isinstance(metadata, str):
+                    try:
+                        row_list[1] = json.loads(metadata)
+                    except Exception:
+                        pass
+                fixed.append(tuple(row_list))
+            else:
+                fixed.append(row)
+        return _orig(fixed, has_similarity_score, has_embeddings)
+
+    vs_module._read_similarity_output = _fixed_read_similarity_output
+except Exception as e:
+    print(f"[OraDB] failed to apply metadata monkeypatch: {e}")
+# --- MONKEYPATCH END ---
 ```
 
-The intermediate skill always inserts this snippet near the top of the user's main module. Non-negotiable.
+The intermediate skill always inserts this snippet near the top of the user's main module (or `store.py`). Non-negotiable. Note the real signature accepts `(results, has_similarity_score, has_embeddings)` — earlier prose versions of this file showed an instance-method shape that does **not** apply to the module-level function and silently no-ops.
 
 ### Hybrid retrieval via `EnsembleRetriever`
 
@@ -106,22 +125,78 @@ For users who want raw-SQL hybrid search (more control, less LangChain), the ski
 
 ### Persistent chat history
 
-`langchain-oracledb` provides a message-history class so conversations survive script restarts. Pattern (the package's own README is the canonical reference until we have a first-party exemplar):
+`langchain-oracledb` does **not** ship a chat-message-history class as of this writing — its top-level submodules are only `document_loaders`, `embeddings`, `retrievers`, `utilities`, `vectorstores`. So we roll a tiny one ourselves on top of `oracledb` + LangChain's `BaseChatMessageHistory`. This is intentional: the class is small, the storage shape is project-specific, and it keeps the dep surface honest.
 
 ```python
-from langchain_oracledb.chat_message_histories import OracleChatMessageHistory
+import json
+import oracledb
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict
 
-history = OracleChatMessageHistory(
-    session_id=user_session,
-    connection=conn,
-    table_name="CHAT_HISTORY",
-)
-history.add_user_message("what's my name?")
-history.add_ai_message("you told me earlier — Maria")
-# next run, same session_id → full history reloads
+
+class OracleChatHistory(BaseChatMessageHistory):
+    """Persistent chat history backed by an Oracle table.
+
+    DDL (run once, e.g. in store.py bootstrap):
+        CREATE TABLE chat_history (
+            session_id VARCHAR2(120) NOT NULL,
+            seq        NUMBER GENERATED ALWAYS AS IDENTITY,
+            payload    CLOB CHECK (payload IS JSON),
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (session_id, seq)
+        );
+    """
+
+    def __init__(self, conn: oracledb.Connection, session_id: str,
+                 table_name: str = "chat_history"):
+        self.conn = conn
+        self.session_id = session_id
+        self.table = table_name
+
+    @property
+    def messages(self) -> list[BaseMessage]:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"SELECT payload FROM {self.table} "
+                f"WHERE session_id = :sid ORDER BY seq",
+                sid=self.session_id,
+            )
+            rows = [json.loads(r[0].read() if hasattr(r[0], "read") else r[0])
+                    for r in cur.fetchall()]
+        return messages_from_dict(rows)
+
+    def add_message(self, message: BaseMessage) -> None:
+        payload = json.dumps(messages_to_dict([message])[0])
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {self.table} (session_id, payload) VALUES (:sid, :p)",
+                sid=self.session_id, p=payload,
+            )
+        self.conn.commit()
+
+    def clear(self) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {self.table} WHERE session_id = :sid",
+                        sid=self.session_id)
+        self.conn.commit()
 ```
 
-Wire it into a chain via `RunnableWithMessageHistory` per LangChain docs.
+Wire into a chain via LangChain's `RunnableWithMessageHistory`:
+
+```python
+from langchain_core.runnables.history import RunnableWithMessageHistory
+
+chain_with_history = RunnableWithMessageHistory(
+    chain,
+    lambda sid: OracleChatHistory(conn, session_id=sid),
+    input_messages_key="question",
+    history_messages_key="history",
+)
+chain_with_history.invoke({"question": "..."},
+                          config={"configurable": {"session_id": "user-42"}})
+```
+
+The intermediate skill scaffolds this class verbatim into the project's `history.py`. Don't try to import from `langchain_oracledb.chat_message_histories` — it isn't there.
 
 ### `add_documents` vs `from_texts`
 

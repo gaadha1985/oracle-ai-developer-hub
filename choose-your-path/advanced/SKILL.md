@@ -65,12 +65,12 @@ Order matters; later modules depend on earlier ones.
 
 ### 3b — Inference and storage
 
-7. `src/<package>/inference.py` — embedder + LLM factories per `oci-genai-openai.md` and `langchain-oracledb.md`. If ONNX in-DB selected, also expose `InDBEmbeddings` from `onnx-in-db-embeddings.md`.
+7. `src/<package>/inference.py` — embedder + LLM factories per `oci-genai-openai.md` and `langchain-oracledb.md`. For OCI: scaffold Pattern 1 (`oci-openai` SDK + `oci.signer.Signer`) — Pattern 2 (bare bearer token) only if user explicitly opts in. If ONNX in-DB selected, also expose `InDBEmbeddings` from `onnx-in-db-embeddings.md`.
 8. `src/<package>/store.py` — `OracleVS` multi-collection wrapper. Metadata-as-string monkeypatch. Cite `apps/agentic_rag/src/OraDBVectorStore.py:1-100`.
 
 ### 3c — Memory layer (always)
 
-9. `src/<package>/memory/manager.py` — port the 6-memory-type pattern from `apps/finance-ai-agent-demo/backend/memory/manager.py:1-100`. Each memory type gets `write_*`, `read_*`, `search_*` methods. All vector-searchable where it makes sense.
+9. `src/<package>/memory/manager.py` — port the 6-memory-type pattern from `apps/finance-ai-agent-demo/backend/memory/manager.py:1-100`. Each memory type gets `write_*`, `read_*`, `search_*` methods. All vector-searchable where it makes sense. The conversational-memory table doubles as the backing table for the `OracleChatHistory` class from `langchain-oracledb.md` — wire `RunnableWithMessageHistory` against it. Do NOT import from `langchain_oracledb.chat_message_histories` (doesn't exist).
 10. `src/<package>/memory/entity.py` — entity-memory pattern from `sprawl_manager.py` (people/places/topics with embeddings).
 11. `src/<package>/memory/event_log.py` — tool-execution + reasoning log from `apps/agentic_rag/src/OraDBEventLogger.py`.
 

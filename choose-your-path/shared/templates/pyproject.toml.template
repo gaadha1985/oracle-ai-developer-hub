@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "{{project_slug}}"
 version = "0.1.0"
@@ -8,16 +12,29 @@ license = { text = "MIT" }
 authors = [
     { name = "{{author}}" },
 ]
+# The skill uncomments exactly one inference block during scaffolding.
+# Leaving them all uncommented is wrong — pick the user's chosen backend.
 dependencies = [
     "oracledb>=2.4",
     "langchain-oracledb>=0.1",
-    # Inference deps — the skill picks one set:
-    # Beginner / local: "langchain-ollama>=0.2"
-    # Intermediate OCI: "langchain-openai>=0.2", "oci>=2.130"
-    # Bring-your-own:   "langchain-openai>=0.2"
-    # UI (intermediate / advanced only):
-    # "gradio>=4.0"
+    "langchain>=0.3",
+    "langchain-core>=0.3",
     "python-dotenv>=1.0",
+    "pydantic>=2",
+
+    # ── Inference: Ollama (beginner default, intermediate fallback) ──
+    # "langchain-ollama>=0.2",
+
+    # ── Inference: OCI Generative AI (intermediate / advanced) ──
+    # "oci>=2.130",
+    # "oci-openai>=0.1",   # see shared/references/oci-genai-openai.md — required for SigV1
+    # "langchain-openai>=0.2",
+
+    # ── Inference: BYO OpenAI-compatible URL ──
+    # "langchain-openai>=0.2",
+
+    # ── UI (intermediate + advanced only) ──
+    # "gradio>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +45,10 @@ dev = [
 
 [project.scripts]
 {{entrypoint_name}} = "{{package_name}}.main:main"
+
+# `pip install -e .` requires this for src-layout projects.
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 100

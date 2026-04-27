@@ -3,8 +3,24 @@
 Run this after `docker compose up -d --wait`. It exits non-zero on any failure
 and prints exactly one line on success: `verify: OK (...)`.
 
-The skill fills in {{...}} placeholders during scaffolding. Do not edit by
-hand unless you know what you're doing.
+PLACEHOLDERS the scaffolding skill replaces (in order they appear):
+  {{embedder_init}}      — full embedder constructor expression, e.g.
+                           OllamaEmbeddings(model="nomic-embed-text")
+                           OciCohereEmbeddings(model="cohere.embed-english-v3.0", ...)
+  {{llm_init}}           — chat-LLM constructor, e.g.
+                           ChatOllama(model="llama3.1:8b", temperature=0)
+                           OciOpenAI-backed wrapper (see oci-genai-openai.md)
+  {{prompt}}             — short, deterministic test prompt as a Python string,
+                           e.g. "Reply with the single word OK."
+  {{inference_enabled}}  — Python literal True or False; True if the project
+                           uses a chat LLM, False if it's vector-only.
+
+The skill ALSO injects the right `import` lines at the top of the file for
+whichever embedder/LLM it picked, plus the metadata-as-string monkeypatch
+from shared/references/langchain-oracledb.md when the project uses OracleVS
+filtered retrieval.
+
+Do not edit by hand unless you know what you're doing.
 """
 from __future__ import annotations
 

@@ -37,6 +37,7 @@ When the user picks OCI:
 - Confirm region. If they pick `grok-4` and aren't in `us-chicago-1`, warn and offer Cohere or Llama as a same-region alternative (per `oci-genai-openai.md`).
 - Check `~/.oci/config` exists; if not, point them at `oci setup config` and stop.
 - Confirm `OCI_COMPARTMENT_ID` is available (env or interview answer).
+- **Auth pattern.** OCI's OpenAI-compat endpoint requires Signature V1 — bare `langchain_openai.ChatOpenAI(api_key=...)` returns 401. The skill scaffolds Pattern 1 from `oci-genai-openai.md` (`oci-openai` SDK with `oci.signer.Signer`) by default and mentions the bearer-token Pattern 2 only if the user explicitly says their tenancy supports it.
 
 Print confirmation block. Wait for `y`.
 
@@ -54,7 +55,7 @@ Spec dict:
 | `notebook` | yes by default |
 | `qwen_mitigations` | only if user picked an Ollama Qwen chat model |
 
-Validate **embedding-dim consistency before writing any file** by calling `embedder.embed_query("dim check")` and checking the length matches `embedding_dim`. If mismatch: stop, ask the user.
+Validate **embedding-dim consistency** in `verify.py`'s round-trip step — not before scaffolding (deps aren't installed yet at scaffold-time, so calling `embedder.embed_query()` would fail). The skill records the expected `embedding_dim` (768 for nomic, 1024 for Cohere) into a constant in `store.py`; verify.py calls `embedder.embed_query("dim check")` once and asserts `len(...) == EXPECTED_DIM`. If verify reports a mismatch, drop the table and re-bootstrap with the correct embedder per `langchain-oracledb.md`.
 
 ## Step 3 — Scaffold
 
@@ -78,8 +79,10 @@ Create files in this order. Cite exemplars in headers.
 8. `src/<package>/inference.py` — embedder + LLM init. One factory per backend (OCI / Ollama / BYO). The factory checks env vars on import and raises a clear error if unset.
    - For OCI embeddings: write the LangChain `Embeddings` subclass that wraps `GenerativeAiInferenceClient.embed_text` per `oci-genai-openai.md`. Filter empties, batch by 96, cache the client.
 9. `src/<package>/history.py` — persistent chat history.
-   - Use `OracleChatMessageHistory` from `langchain-oracledb`.
-   - Wrap in `RunnableWithMessageHistory` exposed as `with_history(chain)`.
+   - `langchain-oracledb` does NOT ship a chat-history class. Scaffold the small `OracleChatHistory(BaseChatMessageHistory)` subclass from `langchain-oracledb.md` § "Persistent chat history" verbatim (~30 lines, backs onto a `chat_history` table in Oracle).
+   - Run the table DDL once during bootstrap (in `store.py` or a `migrations/` SQL file).
+   - Wrap with `RunnableWithMessageHistory(chain, lambda sid: OracleChatHistory(conn, sid), input_messages_key="question", history_messages_key="history")`. Expose as `with_history(chain)`.
+   - Do NOT `from langchain_oracledb.chat_message_histories import ...` — it doesn't exist.
 10. `src/<package>/retrieval.py` — hybrid retriever.
     - Default = `EnsembleRetriever([vector, BM25])` per `hybrid-search.md` Pattern A.
     - Add a `pure_vector_retriever()` for the user to swap in if BM25 memory is a concern.
