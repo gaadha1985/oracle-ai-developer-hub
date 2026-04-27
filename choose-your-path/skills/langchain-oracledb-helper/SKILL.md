@@ -4,7 +4,7 @@ description: Scaffold a langchain-oracledb store layer — multi-collection Orac
 inputs:
   - target_dir: project root (must already have a working DB — invoke oracle-aidb-docker-setup first if not)
   - package_slug: snake_case Python package name (e.g. "pdf_chat", "nl2sql_agent")
-  - embedder: one of "oci-cohere" (1024 dim), "ollama-nomic" (768 dim), "in-db-onnx" (384 dim, MiniLM)
+  - embedder: one of "minilm-py" (384 dim, sentence-transformers), "in-db-onnx" (384 dim, registered MY_MINILM_V1), "oci-cohere" (1024 dim, opt-in alt)
   - collections: list[str] — collection names like ["DOCUMENTS", "CONVERSATIONS"]. Always include CONVERSATIONS if the project has chat.
   - has_chat_history: bool — if True, scaffold the OracleChatHistory class + DDL.
 outputs:
@@ -34,11 +34,13 @@ You write the Oracle data-layer modules. You do not write app code, chains, or U
 
 | Embedder | Dim | Module |
 | --- | --- | --- |
-| `oci-cohere` | 1024 | `shared/snippets/oci_cohere_embeddings.py` (LangChain `Embeddings` subclass over `GenerativeAiInferenceClient`) |
-| `ollama-nomic` | 768 | `langchain_ollama.OllamaEmbeddings(model="nomic-embed-text")` |
-| `in-db-onnx` | 384 | Custom `Embeddings` subclass calling `VECTOR_EMBEDDING(MODEL_NAME USING :t AS data) FROM dual` |
+| `minilm-py` | 384 | `langchain_huggingface.HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")` — Python-side inference, no DB registration. Default for **beginner** tier. |
+| `in-db-onnx` | 384 | Custom `Embeddings` subclass calling `VECTOR_EMBEDDING(MODEL_NAME USING :t AS data) FROM dual`. Default for **intermediate / advanced** tiers. Same MiniLM model as `minilm-py`, just registered inside Oracle. |
+| `oci-cohere` | 1024 | `shared/snippets/oci_cohere_embeddings.py` (LangChain `Embeddings` subclass over `GenerativeAiInferenceClient`). Opt-in alternate for users who specifically want Cohere quality + multilingual. Different dim, so re-bootstrap required when swapping. |
 
 Hard-code `EXPECTED_DIM` in `store.py`. `verify.py` (written by the tier skill) asserts `len(embedder.embed_query("dim check")) == EXPECTED_DIM` — runtime check, not import-time.
+
+The whole point of defaulting to `minilm-py` in beginner and `in-db-onnx` in intermediate/advanced: **same model, same dim, same chunk-size sweet spot across tiers**. A corpus ingested at tier 1 can be re-ingested at tier 2 against the same embedding space — only the inference location changes.
 
 ## Step 3 — Write `_monkeypatch.py`
 
@@ -184,7 +186,7 @@ langchain-oracledb-helper: OK
   monkeypatch:  target_dir/src/<package_slug>/_monkeypatch.py
   history:      target_dir/src/<package_slug>/history.py        (if scaffolded)
   migrations:   target_dir/migrations/001_chat_history.sql      (if scaffolded)
-  embedder:     <oci-cohere|ollama-nomic|in-db-onnx> (dim=<384|768|1024>)
+  embedder:     <minilm-py|in-db-onnx|oci-cohere> (dim=<384|384|1024>)
   collections:  <list>
   next:         hand off to the tier skill — it writes app code that imports `store`.
 ```

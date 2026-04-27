@@ -55,7 +55,7 @@ Claude reads the top-level router, then asks "which path?" — answer `1` (begin
 | Q1 — Path | `beginner` (already answered above) |
 | Q2 — Target dir | `.` (current directory) |
 | Q3 — Database | `local Docker` |
-| Q4 — Inference | OCI GenAI is the only option at this tier. Confirm `~/.oci/config` exists, `OCI_COMPARTMENT_ID` is set, you're OK with non-zero OCI cost. Region default `us-chicago-1` for Grok 4. Embedder default = `cohere.embed-english-v3.0`. |
+| Q4 — Inference | OCI GenAI for the LLM (Grok 4). Confirm `~/.oci/config` exists, `OCI_COMPARTMENT_ID` is set, you're OK with non-zero OCI cost. Region default `us-chicago-1`. Embedder default = `sentence-transformers/all-MiniLM-L6-v2` (Python-side, 384 dim — ~90MB downloaded once on first run). Same model intermediate/advanced register inside Oracle. |
 | Q5 — Topic | `1` (PDFs) |
 | Q6 — Notebook | `no` (beginner default) |
 

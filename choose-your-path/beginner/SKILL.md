@@ -1,6 +1,6 @@
 ---
 name: choose-your-path-beginner
-description: Scaffold a small RAG chatbot on Oracle 26ai Free + langchain-oracledb + OCI Generative AI (Cohere embeddings + Grok 4) + Open WebUI. Three flavors that share one skeleton — PDF / Markdown / Web. For users new to Oracle who want a polished demo running in an afternoon.
+description: Scaffold a small RAG chatbot on Oracle 26ai Free + langchain-oracledb + OCI Generative AI Grok 4 + sentence-transformers MiniLM-L6-v2 (Python-side embeddings, same model intermediate/advanced register inside Oracle) + Open WebUI. Three flavors that share one skeleton — PDF / Markdown / Web. For users new to Oracle who want a polished demo running in an afternoon.
 inputs:
   - target_dir: where to scaffold (default ~/git/personal/<slug>)
   - topic: optional; one of beginner/project-ideas.md, or a free-text pitch
@@ -27,12 +27,12 @@ You may not write SQL, embedder calls, or table-creation code that contradicts t
 Run the questions from `shared/interview.md`. For beginner specifically:
 
 - **Q3 (DB target)** — default to "Local Docker" without re-asking.
-- **Q4 (Inference)** — *not optional anymore at this tier*. **OCI Generative AI** is the only choice. Verify:
+- **Q4 (Inference)** — *not optional anymore at this tier*. **OCI Generative AI** for the LLM (Grok 4). **MiniLM Python-side** for embeddings. Verify:
   - `~/.oci/config` exists. If not, stop and tell the user to run `oci setup config`.
   - `OCI_COMPARTMENT_ID` is in env or capture it now.
   - The user is OK with non-zero OCI cost (mention this once — Grok 4 is not on the always-free list).
   - Region: warn if not `us-chicago-1` (Grok 4 only ships there). If the user is elsewhere, offer `cohere.command-r-plus` as a same-region fallback.
-  - Embedder: `cohere.embed-english-v3.0` (1024 dim) by default. Multilingual variant available if the user explicitly asks.
+  - Embedder: `sentence-transformers/all-MiniLM-L6-v2` (384 dim) by default — runs inside the user's Python process via `HuggingFaceEmbeddings`. Same model that intermediate/advanced register inside Oracle, so corpus + chunks stay comparable across tiers.
   - Chat: `grok-4`.
 - **Q5 (Topic)** — pick one of the three from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to **idea 1 (PDFs)** and tell the user why.
 - **Q6 (Notebook)** — default **no**. Beginner ships the chat UI, not a notebook walkthrough.
@@ -48,8 +48,9 @@ Build a scaffold spec from the interview:
 | `project_slug` | derived from topic, kebab-case: `pdf-chat`, `notes-chat`, `web-chat` |
 | `package_slug` | snake_case: `pdf_chat`, `notes_chat`, `web_chat` |
 | `target_dir` | from Q2 or `~/git/personal/<project_slug>` |
-| `embedder` | `oci-cohere` (always) |
-| `embedding_dim` | 1024 |
+| `embedder` | `minilm-py` (always) |
+| `embedding_dim` | 384 |
+| `embedding_model_id` | `sentence-transformers/all-MiniLM-L6-v2` |
 | `llm_model` | `grok-4` (or fallback chosen during interview) |
 | `oci_base_url` | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai` |
 | `collections` | `["DOCUMENTS", "CONVERSATIONS"]` |
@@ -83,13 +84,13 @@ Order matters — invocation of building-block skills happens **before** project
    volumes:
      openwebui_data:
    ```
-4. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=oci-cohere`, `collections=["DOCUMENTS", "CONVERSATIONS"]`, `has_chat_history=True`. It writes `store.py`, `_monkeypatch.py`, `history.py`, `migrations/001_chat_history.sql`. Block until it reports OK.
+4. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=minilm-py`, `collections=["DOCUMENTS", "CONVERSATIONS"]`, `has_chat_history=True`. It writes `store.py`, `_monkeypatch.py`, `history.py`, `migrations/001_chat_history.sql`. The helper will install `sentence-transformers` and pre-cache the model on first import to avoid a stall during the first user query. Block until it reports OK.
 
 ### 3b — Project-specific code (the only files this skill writes itself)
 
 5. `target_dir/.gitignore` — extend with `data/`, `*.pdf`, `notes/`.
 6. `target_dir/pyproject.toml` — extend deps:
-   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-openai>=0.2`, `oci-openai>=0.1`, `oci>=2.130`.
+   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-openai>=0.2`, `oci-openai>=0.1`, `oci>=2.130`, `langchain-huggingface>=0.1`, `sentence-transformers>=2.7`.
    - Idea 1 (PDFs): + `pypdf>=4`.
    - Idea 2 (Markdown): + `markdown-it-py>=3`.
    - Idea 3 (Web): + `trafilatura>=1.10`, `httpx>=0.27`.
@@ -98,9 +99,19 @@ Order matters — invocation of building-block skills happens **before** project
    OCI_COMPARTMENT_ID=
    OCI_GENAI_BASE_URL=https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai
    OCI_LLM_MODEL=grok-4
-   OCI_EMBED_MODEL=cohere.embed-english-v3.0
+   EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
    ```
-8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat) and `shared/snippets/oci_cohere_embeddings.py` (embedder). Cite both at the top.
+8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat). For the embedder, write a tiny factory:
+   ```python
+   from langchain_huggingface import HuggingFaceEmbeddings
+   _embedder = None
+   def get_embedder():
+       global _embedder
+       if _embedder is None:
+           _embedder = HuggingFaceEmbeddings(model_name=os.environ["EMBED_MODEL"])
+       return _embedder
+   ```
+   Cite the OCI factory at the top.
 9. `src/<package_slug>/<ingest_module>` — per idea:
    - **Idea 1**: walk `data/pdfs/`, parse via `pypdf`, chunk by page + 800-token windows, `store.get_store("DOCUMENTS").add_texts(...)` with `metadata={"filename": ..., "page": ...}`. Idempotent — keep a `data/.ingested.json` ledger.
    - **Idea 2**: walk `NOTES_DIR`, chunk by H2 sections via `markdown-it-py`, metadata = `{"path": ..., "heading": ..., "frontmatter": {...}}`.
@@ -111,13 +122,13 @@ Order matters — invocation of building-block skills happens **before** project
     - `inference_enabled = True`.
     - Round-trip: `embedder.embed_query("dim check")` → assert dim == 1024.
     - Smoke a single chain call against a tiny known corpus (3 lines of test text).
-13. `README.md` — copy `shared/templates/readme.template.md`, fill placeholders. The "Why Oracle" paragraph names: AI Vector Search, OracleVS multi-collection, persistent chat history. Include a "Stack" section listing OCI GenAI Grok 4, Cohere embeddings, langchain-oracledb, Open WebUI. Leave the screenshot slot for the chat UI.
+13. `README.md` — copy `shared/templates/readme.template.md`, fill placeholders. The "Why Oracle" paragraph names: AI Vector Search, `OracleVS`, persistent chat history (`OracleChatHistory`). Include a "Stack" section listing OCI GenAI Grok 4, `sentence-transformers/all-MiniLM-L6-v2` (Python-side, 384 dim — same model intermediate/advanced register *inside* Oracle for in-DB embeddings), `langchain-oracledb`, Open WebUI. Leave the screenshot slot for the chat UI.
 
 ## Step 4 — Verify
 
 1. The DB is already up (skill 1 ensured this).
 2. From `target_dir`: `python -m venv .venv && source .venv/bin/activate && python -m pip install -e .`.
-3. `python verify.py`. Expect `verify: OK (db, vector, inference)`. On failure: follow `shared/verify.md` recovery loop, max 3 retries.
+3. `python verify.py`. Expect `verify: OK (db, vector, inference)`. The vector check asserts `len(get_embedder().embed_query("dim check")) == 384`. First run downloads the MiniLM weights (~90MB) — note this in the verify output so the user knows what's happening. On failure: follow `shared/verify.md` recovery loop, max 3 retries.
 4. Bring Open WebUI up: `docker compose up -d open-webui`. Wait ~10s.
 5. **Run the adapter in the background:** `python -m <package_slug>.adapter` (port 8000). Hit `http://localhost:8000/v1/models` — should return JSON listing one model. Then check `http://localhost:3000` responds (Open WebUI loaded).
 6. Don't keep the adapter running — just confirm it boots cleanly. Kill it before reporting done.

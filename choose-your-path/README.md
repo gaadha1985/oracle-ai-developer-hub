@@ -4,7 +4,7 @@ A skill set that interrogates you, picks an Oracle-AI-DB project at your level, 
 
 | Path | What you build | Stack | Time |
 | --- | --- | --- | --- |
-| [beginner](./beginner/) | Three "X-to-chat" flavors — PDFs, Markdown notes, web pages — into a polished Open WebUI chat. | `langchain-oracledb` + `OracleVS` + OCI Cohere embeddings + Grok 4. | ~1 afternoon |
+| [beginner](./beginner/) | Three "X-to-chat" flavors — PDFs, Markdown notes, web pages — into a polished Open WebUI chat. | `langchain-oracledb` + `OracleVS` + MiniLM-L6-v2 (Python-side) + Grok 4 via OCI GenAI. | ~1 afternoon |
 | [intermediate](./intermediate/) | A Grok-4 tool-calling agent that talks to a live Oracle schema via `oracle-database-mcp-server`, with **embeddings happening inside the database** (registered ONNX model, no external embedder). | + Oracle MCP + in-DB ONNX + Open WebUI. | ~1-2 days |
 | [advanced](./advanced/) | An agent system where Oracle is the **only** state store, built by composing the three [`skills/`](./skills/) building blocks. | + JSON Duality, six memory types, agent self-memory, oracle-database-mcp-server in `read_write` mode (with safety rails) when needed. | ~3-5 days |
 

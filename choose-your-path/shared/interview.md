@@ -39,8 +39,8 @@ For v1 the skill only fully supports option 1. Option 2 = the user has done the 
 
 > **What should generate text and embeddings?**
 > All three tiers use **OCI Generative AI** for the LLM (`grok-4` in `us-chicago-1`, OpenAI-compatible endpoint, Pattern 1 SigV1 auth). What differs is the embedder:
->   - **beginner** → OCI `cohere.embed-english-v3.0` (1024 dim).
->   - **intermediate / advanced** → in-database ONNX (`MY_MINILM_V1`, 384 dim) — embeddings happen inside Oracle via `VECTOR_EMBEDDING(MODEL USING text)`, no external embedder process.
+>   - **beginner** → `sentence-transformers/all-MiniLM-L6-v2` (384 dim) running Python-side via `HuggingFaceEmbeddings`.
+>   - **intermediate / advanced** → the *same* MiniLM model, but registered inside Oracle (`MY_MINILM_V1`) and called via `VECTOR_EMBEDDING(MODEL USING text)` — no external embedder process, no Python embedder loop.
 >
 > *Why: this picks the embedder dim, the chat client, and which env vars get filled in. All three tiers require `~/.oci/config` or instance principal.*
 
