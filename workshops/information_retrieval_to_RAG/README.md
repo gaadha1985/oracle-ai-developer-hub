@@ -87,7 +87,7 @@ information_retrieval_to_RAG/
 
 ## Where to Next?
 
-- **[From RAG to Agents Workshop](https://github.com/speechlyze/from_rag_to_agents_workshop)** — Continue the journey by adding AI agents, multi-agent orchestration, and persistent session memory on top of this RAG pipeline
+- **[From RAG to Agents Workshop](https://github.com/oracle-devrel/oracle-ai-developer-hub/tree/main/workshops/from_rag_to_agents_workshop)** — Continue the journey by adding AI agents, multi-agent orchestration, and persistent session memory on top of this RAG pipeline
 - **[Oracle AI Developer Hub](https://github.com/oracle-devrel/oracle-ai-developer-hub)** — More technical assets, samples, and projects with Oracle AI
 - **[Oracle Developer Resource](https://www.oracle.com/developer/)** — Documentation, tools, and community for Oracle developers
 
