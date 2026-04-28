@@ -22,66 +22,6 @@ Starting from raw data, you will construct a **Research Paper Assistant** — a 
 
 ## Getting Started
 
-### Option A: GitHub Codespaces (recommended for the workshop)
-
-1. Click the **Open in GitHub Codespaces** badge above
-2. Click the **Create Codespace** button to launch your environment
-
-   ![Create Codespace](images/codespaces_creation.png)
-
-3. Wait for the environment to build (~3-5 minutes)
-
-   ![Codespace startup](images/codespace_startup.png)
-
-4. Once the terminal prompt appears, start Oracle AI Database:
-
-   > **Tip:** If your browser prompts you to allow clipboard pasting, click **Allow** so you can paste commands into the terminal.
-
-   ```bash
-   docker compose -f .devcontainer/docker-compose.yml up -d oracle
-   ```
-
-   ![Oracle getting pulled](images/oracle_getting_pulled.png)
-
-5. Wait for Oracle to become healthy (~60-90 seconds), then verify:
-
-   ```bash
-   docker ps
-   ```
-
-   You should see `(healthy)` in the STATUS column for the `oracle-free` container.
-
-   ![Oracle ready](images/oracle_ready.png)
-
-6. Confirm the Python connection works:
-
-   ```bash
-   python3 -c "import oracledb; c = oracledb.connect(user='VECTOR', password='VectorPwd_2025', dsn='localhost:1521/FREEPDB1'); print('Connected. Oracle version:', c.version); c.close()"
-   ```
-
-   ![Database ready](images/database_ready.png)
-
-7. Open [`workshop/notebook_student.ipynb`](workshop/notebook_student.ipynb) in the file explorer
-8. Select the **Python 3.11** kernel:
-
-   Click **Select Kernel** in the top-right corner of the notebook:
-
-   ![Select Kernel](images/select_kernel.png)
-
-   Choose **Python 3.11** from the list:
-
-   ![Select Python 3.11](images/select_kernel_python_3.11.png)
-
-   Confirm it shows as selected:
-
-   ![Kernel Selected](images/ensure_kernel_selected.png)
-
-9. Follow the notebook cells top to bottom, using the part guides in `docs/` when you hit a TODO
-
-> **Note:** On subsequent Codespace opens, Oracle should start automatically via `postStartCommand`. If you ever see a connection error in the notebook, run step 4 above again from the terminal.
-
-### Option B: Local development
-
 This workshop lives inside the [oracle-ai-developer-hub](https://github.com/oracle-devrel/oracle-ai-developer-hub) repository. Use **git sparse-checkout** to pull just this workshop without cloning the rest of the hub:
 
 ```bash
