@@ -2,8 +2,6 @@
 
 **Build a complete RAG pipeline and agentic system with Oracle AI Database, OpenAI, and the Agents SDK**
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/speechlyze/from_rag_to_agents_workshop)
-
 ---
 
 ## What You Will Build

@@ -2,8 +2,6 @@
 
 **Build memory-aware AI agents with Oracle AI Database, LangChain, and Tavily**
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/speechlyze/agent_memory_workshop)
-
 ---
 
 ## What You Will Build

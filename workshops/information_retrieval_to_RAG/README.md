@@ -2,8 +2,6 @@
 
 **Build a complete information retrieval and RAG pipeline with Oracle AI Database and OCI GenAI (xAI Grok 3 Fast)**
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/speechlyze/information_retrieval_to_RAG)
-
 ---
 
 ## What You Will Build
