@@ -1,9 +1,5 @@
 # choose-your-path: overview
 
-A handoff document for someone seeing this for the first time. Lives at `choose-your-path/OVERVIEW.md` in the [oracle-ai-developer-hub](https://github.com/jasperan/oracle-ai-developer-hub) repo (jasperan fork).
-
----
-
 ## What it is
 
 A skill set that takes a developer (typically an influencer who's going to build something on Oracle AI DB and post about it), interrogates them with 6-8 questions, picks a project at their level, and scaffolds a real and runnable application powered by Oracle AI Database + OCI Generative AI.
@@ -71,7 +67,7 @@ This means:
 
 ### Embeddings (one model, two homes)
 
-All three tiers use the **same embedding model** — `sentence-transformers/all-MiniLM-L6-v2` (384 dim, BertTokenizer-family). What changes between tiers is *where the inference runs*.
+All three tiers use the **same embedding model** — `sentence-transformers/all-MiniLM-L6-v2` (384 dims). What changes between tiers is *where the inference runs*.
 
 | Tier | How embeddings happen | Dim | Why |
 | --- | --- | --- | --- |
@@ -111,8 +107,6 @@ Same skeleton across all three; what differs is the source corpus. The user pick
 
 Output: ~350-450 LOC. Open WebUI on `:3000`, FastAPI adapter on `:8000`, Grok 4 answers questions about the user's corpus with citations sourced from Oracle.
 
-**Influencer demo shape:** 30-second GIF — drop a PDF, ask three questions, see citations resolved by `OracleVS`. The README's "Why Oracle" paragraph names AI Vector Search + `OracleChatHistory` as the load-bearing components.
-
 ### Intermediate — three Oracle-MCP-flavored agents (~1-2 days)
 
 The user has built RAG before. This tier puts the spotlight squarely on two Oracle-only patterns: **`oracle-database-mcp-server`** giving the agent live SQL + schema introspection as tools, and **`VECTOR_EMBEDDING(MODEL USING text)`** producing embeddings inside the database via a registered ONNX model (no external embedding API, no data egress).
@@ -125,11 +119,9 @@ The user has built RAG before. This tier puts the spotlight squarely on two Orac
 
 Output: ~600-800 LOC per project. Same Open WebUI + FastAPI shape, plus a Jupyter notebook walkthrough.
 
-**Influencer demo shape:** 60-90 seconds. The frame: agent's tool-call trace shows the MCP server emitting real SQL against a real Oracle schema, and the embedding step happens inside `VECTOR_EMBEDDING(...)`. The talking-points are "no second vector DB, no external embedder, no data leaves the box."
-
 ### Advanced — three projects composed from the skills/ library (~3-5 days)
 
-Constraint: **Oracle is the only state store.** The advanced tier's whole pedagogical point is "what becomes possible when you commit to Oracle for *all* persistence." Each project's own `SKILL.md` writes only application logic; the Oracle layer comes from the [`skills/`](./skills/) building blocks. `verify.py` greps for forbidden imports (`redis`, `psycopg`, `sqlite3`, `chromadb`, `qdrant_client`, `pinecone`, `faiss`) and fails the build if any sneak in — the rule is enforced, not just stated.
+Constraint: **Oracle is the only state store.** The advanced tier's whole pedagogical point is "what becomes possible when you commit to Oracle for *all* persistence." Each project's own `SKILL.md` writes only application logic; the Oracle layer comes from the [`skills/`](./skills/) building blocks. `verify.py` greps for forbidden imports (`redis`, `psycopg`, `sqlite3`, `chromadb`, `qdrant_client`, `pinecone`, `faiss`) and fails the build if any sneak in.
 
 | Idea | Pitch | Oracle features headlined |
 | --- | --- | --- |
@@ -138,5 +130,3 @@ Constraint: **Oracle is the only state store.** The advanced tier's whole pedago
 | 3. Conversational schema designer | Talk about your domain; agent designs the schema, runs DDL via MCP (with confirmation gating), generates JSON Duality views, seeds data, lets you query. | **JSON Duality** as the headline (`CREATE OR REPLACE JSON RELATIONAL DUALITY VIEW ... WITH INSERT UPDATE DELETE`) + DDL-via-MCP in `read_write` mode + `DESIGN_HISTORY` table that makes every step replayable on a fresh DB. The most "Oracle-only could do this" demo in the catalog. |
 
 Output: ~500-700 LOC of project code (the rest is the building blocks). Mandatory notebook. Grok 4 only.
-
-**Influencer demo shape:** 2-3 minutes. Idea 1 = "one DB doing everything." Idea 2 = "the agent's memory is a real Oracle schema you can `SELECT` from." Idea 3 = "I built a working database from a conversation, with JSON Duality views I didn't have to write." Every demo opens or closes on a SQL window showing the underlying Oracle state.
