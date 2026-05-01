@@ -49,6 +49,22 @@ Comprehensive documentation, reference materials, and conference presentations c
 | Building the Brain and Backbone of Enterprise AI Agents           | Advanced reasoning and infrastructure strategies for enterprise AI agents. Covers the 2026 agent stack (layered architecture), reasoning patterns (Chain of Thought, Tree of Thoughts, Self-Reflection, Least-to-Most, Decomposed Prompting), and context/belief updates. Presented at DevWeek SF 2026 by Nacho Martinez. | [![View Guide](https://img.shields.io/badge/View%20Guide-green?style=flat-square)](./guides/brain_backbone_enterprise_agents_devweek_sf_2026.pdf) |
 | Memory Engineering: The Discipline Behind Memory Augmented Agents | Deep dive into memory engineering as a discipline for AI agents — the science of helping agents remember, reason, and act. Covers the memory ecosystem, form factors, and key disciplines shaping memory-augmented agents. Presented at DevWeek SF 2026 (Keynote) by Richmond Alake.                                      | [![View Guide](https://img.shields.io/badge/View%20Guide-green?style=flat-square)](./guides/memory_engineering_devweek_sf_2026.pdf)               |
 
+### 🧠 **Agent Memory** (`/notebooks/agent_memory`)
+
+Notebooks focused on the **[Oracle AI Agent Memory](https://www.oracle.com/database/ai-agent-memory/)** package (`oracleagentmemory`) — the AI-Agent Memory Package built on top of Oracle AI Database. These notebooks demonstrate how to use **Oracle AI Database as the unified memory core for AI agents**, serving conversation history, durable facts, and entity state from a single converged engine instead of stitching together a vector DB, key-value store, and relational store.
+
+The collection covers the package's developer guide, benchmarks against naive memory, and three end-to-end framework examples (OpenAI Agents SDK, Claude Agent SDK, LangGraph).
+
+| Name                       | Description                                                                                                                                                             | Stack                           | Link                                                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OAMP Developer Guide       | Step-by-step guide to the `oracleagentmemory` API: connection, the three core primitives (users/agents, memories, threads), automatic extraction, and vector retrieval. | OAMP, LiteLLM                   | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-red?style=flat-square)](./notebooks/agent_memory/oracle_agent_memory_developer_guide.ipynb) |
+| OAMP Benchmarks            | Quantify token cost, latency, and response quality of OAMP vs. naive flat-history memory across 80 scripted turns with three agent variants.                            | OAMP, LiteLLM, OpenAI           | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-red?style=flat-square)](./notebooks/agent_memory/oracle_agent_memory_benchmarks.ipynb)      |
+| Deep Research Agent        | Build a deep research agent for human genome exploration that uses Tavily for live web search and Oracle AI Agent Memory for durable findings across sessions.          | OpenAI Agents SDK, Tavily, OAMP | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-red?style=flat-square)](./notebooks/agent_memory/01_deep_research_openai_agents.ipynb)      |
+| Supply Chain Assistant     | A supply chain assistant that tracks shipment cargo via in-process tools and an MCP server, with shipment records and operational notes persisted in OAMP.              | Claude Agent SDK, MCP, OAMP     | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-red?style=flat-square)](./notebooks/agent_memory/02_supply_chain_claude_agent_sdk.ipynb)    |
+| Mortgage Approval Workflow | A deterministic mortgage approval workflow modeled as a LangGraph `StateGraph` where OAMP persists applicant data and audit trails so failed runs can resume.           | LangGraph, OAMP                 | [![Open Notebook](https://img.shields.io/badge/Open%20Notebook-red?style=flat-square)](./notebooks/agent_memory/03_mortgage_workflow_langgraph.ipynb)      |
+
+> See the [Agent Memory README](./notebooks/agent_memory/README.md) for a recommended reading order, prerequisites, and Open-in-Colab links.
+
 ### 🎓 **Workshops** (`/workshops`)
 
 Hands-on workshops and guided learning experiences that take developers from fundamentals to production patterns with Oracle AI Database. Each workshop is self-contained with a student notebook (TODO gaps to fill in), a complete reference notebook, step-by-step part guides, and a ready-to-run Codespaces / devcontainer environment with Oracle AI Database pre-configured. Workshops progress from information retrieval and RAG, through agentic systems and orchestration, to memory-augmented agents — together they cover the full stack for building AI applications on Oracle.
@@ -74,8 +90,9 @@ Notebooks and apps contributed by partners in the AI ecosystem. AI Developers ca
 1. **Explore Applications**: Start with the applications in `/apps` to see complete, working examples
 2. **Follow Workshops**: Check `/workshops` for guided learning paths
 3. **Experiment with Notebooks**: Use `/notebooks` for hands-on experimentation
-4. **Reference Guides**: Consult `/guides` for detailed documentation
-5. **Check Partner Resources**: Explore `/partners` for integrations with popular AI tools and frameworks
+4. **Build Memory-Augmented Agents**: Dive into `/notebooks/agent_memory` for the Oracle AI Agent Memory package
+5. **Reference Guides**: Consult `/guides` for detailed documentation
+6. **Check Partner Resources**: Explore `/partners` for integrations with popular AI tools and frameworks
 
 ## Contributing
 
