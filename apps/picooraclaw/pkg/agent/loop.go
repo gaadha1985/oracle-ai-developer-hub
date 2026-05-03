@@ -45,6 +45,7 @@ type AgentLoop struct {
 	running                   atomic.Bool
 	summarizing               sync.Map // Tracks which sessions are currently being summarized
 	channelManager            channelManagerInterface
+	emitter                   EventEmitter // Structured event emitter (defaults to NoopEmitter)
 }
 
 // channelManagerInterface allows the agent loop to query enabled channels.
@@ -63,6 +64,7 @@ type processOptions struct {
 	EnableSummary   bool   // Whether to trigger summarization
 	SendResponse    bool   // Whether to send response via bus
 	NoHistory       bool   // If true, don't load session history (for heartbeat)
+	MessageID       string // Structured event message ID for this turn
 }
 
 // createToolRegistry creates a tool registry with common tools.
@@ -208,7 +210,18 @@ func newAgentLoop(cfg *config.Config, msgBus *bus.MessageBus, provider providers
 		contextBuilder:            contextBuilder,
 		tools:                     toolsRegistry,
 		summarizing:               sync.Map{},
+		emitter:                   NoopEmitter{},
 	}
+}
+
+// SetEventEmitter installs a structured event emitter. Passing nil resets the
+// emitter to a NoopEmitter so call sites can always emit without nil checks.
+func (al *AgentLoop) SetEventEmitter(e EventEmitter) {
+	if e == nil {
+		al.emitter = NoopEmitter{}
+		return
+	}
+	al.emitter = e
 }
 
 // SetPromptStore sets an Oracle-backed prompt store on the context builder.
@@ -330,18 +343,62 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 			"session_key": msg.SessionKey,
 		})
 
+	// Snapshot the emitter once per turn so all emissions use the same instance,
+	// even if SetEventEmitter is called mid-turn. SetEventEmitter's contract says
+	// it's safe to call before Start(); this snapshot protects any reader here.
+	emitter := al.emitter
+	if emitter == nil {
+		emitter = NoopEmitter{}
+	}
+
+	// Generate a message ID for this turn. Tool events reuse the same ID so
+	// consumers can correlate start/tool/end for a single user turn.
+	messageID := fmt.Sprintf("m_%d", time.Now().UnixNano())
+
+	emitter.Emit(Event{
+		Type:      EventMessageStart,
+		SessionID: msg.SessionKey,
+		MessageID: messageID,
+		Timestamp: time.Now(),
+	})
+
 	// Route system messages to processSystemMessage
 	if msg.Channel == "system" {
-		return al.processSystemMessage(ctx, msg)
+		result, err := al.processSystemMessage(ctx, msg)
+		if err != nil {
+			emitter.Emit(Event{
+				Type:      EventError,
+				SessionID: msg.SessionKey,
+				MessageID: messageID,
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+			})
+			return result, err
+		}
+		emitter.Emit(Event{
+			Type:      EventMessageEnd,
+			SessionID: msg.SessionKey,
+			MessageID: messageID,
+			Text:      result,
+			Timestamp: time.Now(),
+		})
+		return result, nil
 	}
 
 	// Check for slash commands
 	if response, handled := al.handleCommand(ctx, msg); handled {
+		emitter.Emit(Event{
+			Type:      EventMessageEnd,
+			SessionID: msg.SessionKey,
+			MessageID: messageID,
+			Text:      response,
+			Timestamp: time.Now(),
+		})
 		return response, nil
 	}
 
 	// Process as user message
-	return al.runAgentLoop(ctx, processOptions{
+	result, err := al.runAgentLoop(ctx, processOptions{
 		SessionKey:      msg.SessionKey,
 		Channel:         msg.Channel,
 		ChatID:          msg.ChatID,
@@ -349,7 +406,26 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		DefaultResponse: "I've completed processing but have no response to give.",
 		EnableSummary:   true,
 		SendResponse:    false,
+		MessageID:       messageID,
 	})
+	if err != nil {
+		emitter.Emit(Event{
+			Type:      EventError,
+			SessionID: msg.SessionKey,
+			MessageID: messageID,
+			Error:     err.Error(),
+			Timestamp: time.Now(),
+		})
+		return result, err
+	}
+	emitter.Emit(Event{
+		Type:      EventMessageEnd,
+		SessionID: msg.SessionKey,
+		MessageID: messageID,
+		Text:      result,
+		Timestamp: time.Now(),
+	})
+	return result, nil
 }
 
 func (al *AgentLoop) processSystemMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
@@ -747,8 +823,55 @@ func (al *AgentLoop) runLLMIteration(ctx context.Context, messages []providers.M
 					})
 				}
 
+				// Emit tool_call_start before execution. Snapshot emitter once to
+				// keep this turn's emissions consistent even if SetEventEmitter
+				// races (contract says don't, but cheap insurance).
+				emitter := al.emitter
+				if emitter == nil {
+					emitter = NoopEmitter{}
+				}
+				emitter.Emit(Event{
+					Type:       EventToolCallStart,
+					SessionID:  opts.SessionKey,
+					MessageID:  opts.MessageID,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+					Args:       tc.Arguments,
+					Timestamp:  time.Now(),
+				})
+
 				toolResult := al.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, opts.Channel, opts.ChatID, asyncCallback)
 				toolResults[idx].result = toolResult
+
+				// Build result + ok fields for tool_call_end.
+				var resultStr string
+				ok := true
+				if toolResult != nil && toolResult.Err != nil {
+					resultStr = toolResult.Err.Error()
+					ok = false
+				} else if toolResult != nil {
+					resultStr = toolResult.ForLLM
+					if resultStr == "" {
+						resultStr = toolResult.ForUser
+					}
+				}
+				if len(resultStr) > 4096 {
+					i := 4096
+					for i > 0 && !utf8.RuneStart(resultStr[i]) {
+						i--
+					}
+					resultStr = resultStr[:i] + "…[truncated]"
+				}
+				emitter.Emit(Event{
+					Type:       EventToolCallEnd,
+					SessionID:  opts.SessionKey,
+					MessageID:  opts.MessageID,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Name,
+					Result:     resultStr,
+					OK:         &ok,
+					Timestamp:  time.Now(),
+				})
 			}(i, tc)
 		}
 		wg.Wait()
@@ -851,7 +974,7 @@ func formatMessagesForLog(messages []providers.Message) string {
 	result += "[\n"
 	for i, msg := range messages {
 		result += fmt.Sprintf("  [%d] Role: %s\n", i, msg.Role)
-		if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
+		if len(msg.ToolCalls) > 0 {
 			result += "  ToolCalls:\n"
 			for _, tc := range msg.ToolCalls {
 				result += fmt.Sprintf("    - ID: %s, Type: %s, Name: %s\n", tc.ID, tc.Type, tc.Name)
@@ -1014,43 +1137,6 @@ func (al *AgentLoop) estimateTokens(messages []providers.Message) int {
 		ratio = 2.8
 	}
 	return int(float64(totalChars) / ratio)
-}
-
-// forceCompression aggressively reduces context when the limit is hit.
-// It drops the oldest 50% of messages, keeping the system prompt and last message.
-func (al *AgentLoop) forceCompression(sessionKey string) {
-	history := al.sessions.GetHistory(sessionKey)
-	if len(history) <= 4 {
-		return
-	}
-
-	// Keep system prompt [0] and last message; drop oldest half of conversation
-	conversation := history[1 : len(history)-1]
-	if len(conversation) == 0 {
-		return
-	}
-
-	mid := len(conversation) / 2
-	droppedCount := mid
-	keptConversation := conversation[mid:]
-
-	newHistory := make([]providers.Message, 0)
-	newHistory = append(newHistory, history[0]) // system prompt
-	newHistory = append(newHistory, providers.Message{
-		Role:    "system",
-		Content: fmt.Sprintf("[System: Emergency compression dropped %d oldest messages due to context limit]", droppedCount),
-	})
-	newHistory = append(newHistory, keptConversation...)
-	newHistory = append(newHistory, history[len(history)-1]) // last message
-
-	al.sessions.SetHistory(sessionKey, newHistory)
-	al.sessions.Save(sessionKey)
-
-	logger.WarnCF("agent", "Forced compression executed", map[string]interface{}{
-		"session_key":  sessionKey,
-		"dropped_msgs": droppedCount,
-		"new_count":    len(newHistory),
-	})
 }
 
 // handleCommand handles slash commands like /show, /list, /switch.

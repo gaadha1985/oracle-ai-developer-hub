@@ -85,3 +85,22 @@ docs/*.md
 task_plan.md
 findings.md
 progress.md
+
+# Agent skill/config directories (local only)
+.agents/
+.claude/
+.crush/
+.openhands/
+.serena/
+.omc/
+
+# Generated content (local only)
+content/
+
+# Terraform local state / plugin cache (never commit)
+deploy/oci/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+
+# Remotion generated video / preview output (regenerable)
+remotion/out/

@@ -89,6 +89,14 @@ type ChannelsConfig struct {
 	Slack    SlackConfig    `json:"slack"`
 	LINE     LINEConfig     `json:"line"`
 	OneBot   OneBotConfig   `json:"onebot"`
+	Web      WebConfig      `json:"web"`
+}
+
+type WebConfig struct {
+	Enabled bool   `json:"enabled" env:"PICOCLAW_CHANNELS_WEB_ENABLED"`
+	Host    string `json:"host" env:"PICOCLAW_CHANNELS_WEB_HOST"`
+	Port    int    `json:"port" env:"PICOCLAW_CHANNELS_WEB_PORT"`
+	Token   string `json:"token" env:"PICOCLAW_CHANNELS_WEB_TOKEN"`
 }
 
 type WhatsAppConfig struct {
@@ -273,8 +281,8 @@ func DefaultConfig() *Config {
 			Defaults: AgentDefaults{
 				Workspace:           "~/.picooraclaw/workspace",
 				RestrictToWorkspace: true,
-				Provider:            "ollama",
-				Model:               "qwen3:latest",
+				Provider:            "openai",
+				Model:               "xai.grok-4",
 				MaxTokens:                 8192,
 				Temperature:               0.7,
 				SummarizeMessageThreshold: 20,
@@ -347,10 +355,14 @@ func DefaultConfig() *Config {
 				GroupTriggerPrefix: []string{},
 				AllowFrom:          FlexibleStringSlice{},
 			},
+			Web: WebConfig{
+				Host: "0.0.0.0",
+				Port: 8090,
+			},
 		},
 		Providers: ProvidersConfig{
 			Anthropic:  ProviderConfig{},
-			OpenAI:     ProviderConfig{},
+			OpenAI:     ProviderConfig{APIKey: "oci-genai", APIBase: "http://localhost:9999/v1"},
 			OpenRouter: ProviderConfig{},
 			Groq:       ProviderConfig{},
 			VLLM:       ProviderConfig{},

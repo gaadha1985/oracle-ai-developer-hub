@@ -220,6 +220,7 @@ simulation_demo.py
 # Dogfood / QA output
 dogfood-output/
 .playwright-mcp/
+content/
 
 
 # OpenCode-generated documentation (local reference only)
@@ -239,3 +240,10 @@ docs/*.md
 task_plan.md
 findings.md
 progress.md
+
+# Local agent directories
+.agents/
+.claude/
+.crush/
+.openhands/
+.pi/

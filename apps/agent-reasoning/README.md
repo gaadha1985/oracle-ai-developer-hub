@@ -1,40 +1,48 @@
-# Agent Reasoning: The Thinking Layer
+<p align="center">
+  <img src="assets/tui-splash.png" alt="Agent Reasoning TUI Splash" width="600"/>
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/agent-reasoning?style=for-the-badge)](https://pypi.org/project/agent-reasoning/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/agent-reasoning?style=for-the-badge)](https://pypi.org/project/agent-reasoning/)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge)](https://www.python.org/)
-![Ollama](https://img.shields.io/badge/backend-Ollama-black?style=for-the-badge)
-![Reasoning](https://img.shields.io/badge/reasoning-16%20strategies%20|%20CoT%20|%20ToT%20|%20ReAct%20|%20MCTS%20|%20Debate%20|%20Socratic%20|%20Meta-purple?style=for-the-badge)
-![Status](https://img.shields.io/badge/status-experimental-orange?style=for-the-badge)
+<h1 align="center">Agent Reasoning: The Thinking Layer</h1>
 
-![Agent Reasoning TUI Splash](assets/tui-splash.png)
+<p align="center"><strong>Transform standard open-source LLMs into reliable problem solvers with 16 advanced cognitive architectures. From predicting the next token to predicting the next thought.</strong></p>
 
-<div align="center">
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/Backend-Ollama-black?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama"/>
+  <img src="https://img.shields.io/badge/Reasoning-16%20Strategies-purple?style=for-the-badge" alt="Reasoning"/>
+  <a href="https://pypi.org/project/agent-reasoning/"><img src="https://img.shields.io/pypi/v/agent-reasoning?style=for-the-badge" alt="PyPI"/></a>
+  <a href="https://pypi.org/project/agent-reasoning/"><img src="https://img.shields.io/pypi/dm/agent-reasoning?style=for-the-badge" alt="PyPI Downloads"/></a>
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
+  <img src="https://img.shields.io/badge/Status-Experimental-orange?style=for-the-badge" alt="Status"/>
+</p>
 
-**[View Interactive Presentation](docs/slides/presentation.html)** | Animated overview of the project
-
-</div>
+---
 
 <table>
-<tr>
-<td><img src="docs/slides/slide-01.png" alt="Title" width="400"/></td>
-<td><img src="docs/slides/slide-02.png" alt="Overview" width="400"/></td>
-</tr>
-<tr>
-<td><img src="docs/slides/slide-03.png" alt="Architecture" width="400"/></td>
-<td><img src="docs/slides/slide-04.png" alt="Features" width="400"/></td>
-</tr>
-<tr>
-<td><img src="docs/slides/slide-05.png" alt="Tech Stack" width="400"/></td>
-<td><img src="docs/slides/slide-06.png" alt="Getting Started" width="400"/></td>
-</tr>
+  <tr>
+    <td align="center"><strong>Title</strong><br><img src="docs/slides/slide-01.png" alt="Title" width="400"/></td>
+    <td align="center"><strong>Overview</strong><br><img src="docs/slides/slide-02.png" alt="Overview" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Architecture</strong><br><img src="docs/slides/slide-03.png" alt="Architecture" width="400"/></td>
+    <td align="center"><strong>Features</strong><br><img src="docs/slides/slide-04.png" alt="Features" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Tech Stack</strong><br><img src="docs/slides/slide-05.png" alt="Tech Stack" width="400"/></td>
+    <td align="center"><strong>Getting Started</strong><br><img src="docs/slides/slide-06.png" alt="Getting Started" width="400"/></td>
+  </tr>
 </table>
+
+<p align="center">
+  <a href="https://jasperan.github.io/agent-reasoning/interactive/">Explore the Interactive Explorer &rarr;</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="docs/slides/presentation.html">View Interactive Presentation &rarr;</a>
+</p>
 
 ## Installation
 
 <!-- one-command-install -->
-> **One-command install** — clone, configure, and run in a single step:
+> **One-command install**: clone, configure, and run in a single step.
 >
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/jasperan/agent-reasoning/main/install.sh | bash
@@ -60,7 +68,7 @@
 
 The **Reasoning Layer** is the cognitive engine of the AI stack. While traditional LLMs excel at token generation, they often struggle with complex planning, logical deduction, and self-correction.
 
-This repository transforms standard Open Source models (like `gemma3`, `llama3`) into robust problem solvers by wrapping them in advanced cognitive architectures. It implements findings from key research papers (CoT, ToT, ReAct) to give models "agency" over their thinking process.
+This repository transforms standard Open Source models (like `gemma3`, `llama3`) into reliable problem solvers by wrapping them in advanced cognitive architectures. It implements findings from key research papers (CoT, ToT, ReAct) to give models "agency" over their thinking process.
 
 > **"From predicting the next token to predicting the next thought."**
 
@@ -188,7 +196,7 @@ Interactive Jupyter notebooks demonstrating agent reasoning capabilities:
 *   **Model Agnostic**: Works with any model served by Ollama.
 *   **Advanced Architectures**:
     *   🔗 **Chain-of-Thought (CoT)** & **Self-Consistency**: Implements Majority Voting ($k$ samples) with temperature sampling.
-    *   🌳 **Tree of Thoughts (ToT)**: BFS strategy with robust heuristic scoring and pruning.
+    *   🌳 **Tree of Thoughts (ToT)**: BFS strategy with reliable heuristic scoring and pruning.
     *   🛠️ **ReAct (Reason + Act)**: Real-time tool usage (**Web Search** via scraping, Wikipedia API, Calculator) with fallback/mock capabilities. External grounding implemented.
     *   🪞 **Self-Reflection**: Dynamic multi-turn Refinement Loop (Draft -> Critique -> Improve).
     *   🧩 **Decomposition & Least-to-Most**: Planning and sub-task execution.
@@ -575,7 +583,7 @@ class MyNewAgent(BaseAgent):
 
 *   **Model Not Found**: Ensure you have pulled the base model (`ollama pull gemma3:270m`).
 *   **Timeout / Slow**: ToT and Self-Reflection make multiple calls to the LLM. With larger models (Llama3 70b), this can take time.
-*   **Hallucinations**: The default demo uses `gemma3:270m` which is extremely small and prone to logic errors. Switch to `gemma2:9b` or `llama3` for robust results.
+*   **Hallucinations**: The default demo uses `gemma3:270m` which is extremely small and prone to logic errors. Switch to `gemma2:9b` or `llama3` for reliable results.
 
 ---
 
@@ -709,8 +717,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 <div align="center">
-
-[![GitHub](https://img.shields.io/badge/GitHub-jasperan-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jasperan)&nbsp;
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-jasperan-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/jasperan/)
-
+  <a href="https://github.com/jasperan"><img src="https://img.shields.io/badge/GitHub-jasperan-181717?style=for-the-badge&logo=github" alt="GitHub"/></a>
+  &nbsp;
+  <a href="https://linkedin.com/in/jasperan"><img src="https://img.shields.io/badge/LinkedIn-jasperan-0A66C2?style=for-the-badge&logo=linkedin" alt="LinkedIn"/></a>
 </div>
