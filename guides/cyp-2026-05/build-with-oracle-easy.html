@@ -1250,6 +1250,30 @@ thread = client.<span class="fn">create_thread</span>(user_id, agent_id)</pre>
 </section>
 
 <!-- =========================================================
+     SLIDE 19 — AGENT-REASONING (compact, half-density)
+     Reference repo, not an official Oracle integration
+     ========================================================= -->
+<section class="slide" id="slide-19">
+  <div class="slide-num">19 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Reference repo · <em>not</em> an official Oracle integration</div>
+    <h2 class="section-title reveal" contenteditable="false">Small models. <em>Big</em> reasoning patterns.</h2>
+    <ul class="bullets reveal" contenteditable="false" style="max-width: 60em;">
+      <li><code>apps/agent-reasoning/</code> ships <strong>11 cognitive architectures</strong> over Ollama — CoT, ToT, ReAct, Reflexion, Self-Refine, and others.</li>
+      <li>Useful when your model is small enough that the architecture has to do the heavy lifting. Pair with Qwen3.5-7B or smaller on a laptop.</li>
+      <li><strong>Caveat.</strong> This is a reference repo, not an Oracle-shipped library. The other slides on this deck are official integrations; this one is "here's what reasoning looks like when you can't lean on a 70B-class model."</li>
+    </ul>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
