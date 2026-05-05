@@ -26,7 +26,9 @@ services:
       ORACLE_PWD: ${ORACLE_PWD}
       ORACLE_CHARACTERSET: AL32UTF8
     volumes:
-      - ${ORACLE_VOLUME:-oracle-data}:/opt/oracle/oradata
+      # The volume *alias* `oradata` is fixed; the actual docker volume name
+      # comes from the `volumes:` block below via `name: ${ORACLE_VOLUME...}`.
+      - oradata:/opt/oracle/oradata
       # Drop SQL files in ./init-schema/ — Oracle runs them once on first boot,
       # against FREEPDB1, alphabetically. Used by some skills for seed data.
       - ./init-schema:/opt/oracle/scripts/startup:ro
@@ -40,6 +42,9 @@ services:
       start_period: 90s
 
 volumes:
-  oracle-data:
-  # If ORACLE_VOLUME is set in .env to something other than `oracle-data`,
-  # docker compose creates the matching named volume on first up.
+  # Static alias `oradata` (referenced by the service's volumes:) bound to
+  # a parametric docker volume id via `name:`. This lets parallel runs use
+  # the same compose template with different .env values for ORACLE_VOLUME
+  # without colliding.
+  oradata:
+    name: ${ORACLE_VOLUME:-oracle-data}

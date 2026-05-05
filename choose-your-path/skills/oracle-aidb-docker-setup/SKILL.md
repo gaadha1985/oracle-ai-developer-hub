@@ -30,6 +30,7 @@ You scaffold the Oracle 26ai Free container AND create the app user the rest of 
 - After installing Docker, you must open a fresh shell for `docker` group membership to take effect — or use `sudo docker ...` for the rest of this session.
 - `conda activate <env>` does not work in non-interactive bash. Call binaries by absolute path (`~/miniconda3/envs/<env>/bin/python`).
 - conda-forge `python=3.12` does not include `pip` — when creating an env, list `pip` explicitly: `conda create -n <env> -c conda-forge --override-channels python=3.12 pip -y`.
+- **Parallel runs need separate ports for ALL services**, not just Oracle. The tier skills typically write Open WebUI on `:3000` and the FastAPI adapter on `:8000` — if you're running multiple choose-your-path projects at once, override these in the project's `.env` (`OPEN_WEBUI_PORT`, `ADAPTER_PORT`) and read them from `docker-compose.yml` + the adapter's `uvicorn.run(port=...)` call.
 
 ## Step 1 — Detect existing setup
 

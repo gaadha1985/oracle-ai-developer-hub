@@ -65,7 +65,7 @@ Per-idea collections + tools:
 1. Refuse if `target_dir` is non-empty.
 2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
 3. Append the **Open WebUI** service to the generated compose file (same as beginner / intermediate).
-4. **Register the in-DB ONNX model via `onnx2oracle` CLI.** Same as intermediate Step 3a-4: `pip install onnx2oracle`, then `onnx2oracle load sentence-transformers/all-MiniLM-L6-v2 --name MY_MINILM_V1 --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" --force`. Smoke with `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual`. Required GRANTs (`CREATE MINING MODEL`, `EXECUTE ON SYS.DBMS_VECTOR`) are issued by `oracle-aidb-docker-setup` Step 6.
+4. **Register the in-DB ONNX model via `onnx2oracle` CLI.** Same as intermediate Step 3a-4: `pip install onnx2oracle`, then `onnx2oracle load all-MiniLM-L6-v2 --name MY_MINILM_V1 --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" --force`. Smoke with `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual`. Required GRANTs (`CREATE MINING MODEL`, `EXECUTE ON SYS.DBMS_VECTOR`) are issued by `oracle-aidb-docker-setup` Step 6.
 5. **Invoke `skills/langchain-oracledb-helper`.** Pass `embedder=in-db-onnx`, the per-idea collections, `has_chat_history=True`. Block until OK.
 6. **Invoke `skills/oracle-mcp-server-helper`.** Pass the per-idea `sql_mode` and `allowed_tools`. For idea 3, the helper will refuse to proceed silently — capture the explicit user `y` before invoking.
 
@@ -110,6 +110,8 @@ Write only the files specific to the chosen idea. Order: migrations → memory a
     - Memory writes are AUTOMATIC at `finish`. The agent must not emit explicit `save_to_memory(...)` tool calls — the loop persists `summaries` and `tool_runs` for it.
     - `finish` substantively after **2-3 useful tool calls**. Don't wander; `MAX_STEPS=12` is a safety net, not a target.
 
+    **Planner LLM call must allow enough tokens for `final_answer` (friction v2-F-v2-1).** The agent loop emits structured JSON containing the `final_answer` text alongside the tool plan. With `max_tokens=600` (the OCI default), Grok 4 can truncate mid-JSON at the boundary between the plan envelope and the answer — the JSON is unparseable and the loop crashes. Use `max_tokens=1500` minimum on the planner `chat_complete` call so `final_answer` (target 1000-1500 chars) fits with envelope overhead.
+
     Without these prompt rules the agent burns through `MAX_STEPS` and persists placeholder content into memory — observed in run #4.
 13. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions` with streaming, exposes "task plan" + "tool calls" + "summary" as separate event types in the SSE stream so Open WebUI can render the agent's reasoning.
 
@@ -133,11 +135,11 @@ Write only the files specific to the chosen idea. Order: migrations → memory a
       - 1: ingest the seed schema, ask "what was Q3 revenue?"; assert SQL ran.
       - 2: empty-task run + memory write + memory retrieve roundtrip.
       - 3: dry-run a `CREATE TABLE customers (...)` through the agent — assert it lands in `DESIGN_HISTORY` without executing.
-14. `notebook.ipynb`:
+14. `notebook.ipynb` — **mandatory at advanced; clean execution is a Bar B requirement, not optional**. The notebook is the demo payoff (the "what does this thing actually do?" artifact for an influencer demo).
     - `polished_ui` focus → 8 cells, last launches the adapter (and you open WebUI manually).
     - `deep_dive` focus → 12-15 cells per idea, walks every component (memory, MCP, agent loop, ONNX SQL).
     - `both` → 12-15 cells, last launches.
-    Cells must execute clean via `jupyter nbconvert --execute`.
+    Cells must execute clean via `jupyter nbconvert --to notebook --execute notebook.ipynb`. Save the executed copy alongside the source so reviewers can see the outputs without re-running.
 15. `README.md` — the "Why Oracle" paragraph names: in-DB ONNX, vector + relational + JSON Duality + property graph (idea 1 references the agentic_rag-style 6-memory pattern; ideas 2 + 3 use specific subsets), MCP server. Include a **"Skills composition" diagram** (mermaid) showing the three skills feeding into the project. Include the "DB-as-only-store proof" callout pointing at the verify forbidden-imports grep.
 
 ## Step 4 — Verify

@@ -8,7 +8,7 @@ The canonical reference [`github.com/jasperan/onnx2oracle`](https://github.com/j
 
 ```bash
 pip install onnx2oracle
-onnx2oracle load sentence-transformers/all-MiniLM-L6-v2 \
+onnx2oracle load all-MiniLM-L6-v2 \
     --name MY_MINILM_V1 \
     --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" \
     --force

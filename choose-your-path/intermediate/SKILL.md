@@ -69,7 +69,7 @@ Order matters: building-block skills first, then project code.
 4. **Register the in-DB ONNX model via `onnx2oracle` CLI** *before* invoking the langchain helper, since the helper's dim assertion needs the model registered:
    - Add `onnx2oracle` to the project's `pyproject.toml` deps.
    - Install: `~/miniconda3/envs/<env>/bin/pip install onnx2oracle`.
-   - Run: `onnx2oracle load sentence-transformers/all-MiniLM-L6-v2 --name MY_MINILM_V1 --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" --force` — outputs `MY_MINILM_V1` registered in the DB.
+   - Run: `onnx2oracle load all-MiniLM-L6-v2 --name MY_MINILM_V1 --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" --force` — outputs `MY_MINILM_V1` registered in the DB.
    - Smoke: `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual` returns a 384-vector. If not, stop and surface the loader error (most common: missing GRANTs — see `shared/references/onnx-in-db-embeddings.md` "Required GRANTs").
    - The required GRANTs (`CREATE MINING MODEL`, `EXECUTE ON SYS.DBMS_VECTOR`) are issued by `oracle-aidb-docker-setup` Step 6. If they're missing, the docker-setup didn't run fully — fix that first.
 5. **Invoke `skills/langchain-oracledb-helper`.** Pass `target_dir`, `package_slug`, `embedder=in-db-onnx` (the helper writes the `InDBEmbeddings` subclass), `collections=...`, `has_chat_history=True`. Block until OK.
