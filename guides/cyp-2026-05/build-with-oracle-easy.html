@@ -1274,6 +1274,48 @@ thread = client.<span class="fn">create_thread</span>(user_id, agent_id)</pre>
 </section>
 
 <!-- =========================================================
+     SLIDE 20 — A10 GPU + Qwen on Ollama / vLLM
+     Local inference plane, OpenAI-compat endpoints
+     ========================================================= -->
+<section class="slide" id="slide-20">
+  <div class="slide-num">20 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Local inference · A10 · INT4 quantization</div>
+    <h2 class="section-title reveal" contenteditable="false">24 GB of VRAM. A 35B-param mixture-of-experts. <em>INT4</em> quantization.</h2>
+    <div class="stat-row reveal" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="stat">
+        <div class="stat-val">35B / 3B</div>
+        <div class="stat-label" contenteditable="false">Qwen3.5-35B-A3B — 35B total params, 3B active per token, 256 experts (9 active)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">~17.5 GB</div>
+        <div class="stat-label" contenteditable="false">on disk at INT4 quantization — fits A10 24 GB with headroom for KV cache</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">2</div>
+        <div class="stat-label" contenteditable="false">OpenAI-compat servers ready to swap behind the same client: <code>ollama serve</code> / <code>vllm.serve</code></div>
+      </div>
+    </div>
+    <div class="two-col reveal" style="margin-top: 0.4em;">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false"><strong>Ollama.</strong> Drop-in. Serves multiple models. GGUF format. Best for laptop work and small-fleet workshops where ergonomics beat throughput.</p>
+      </div>
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false"><strong>vLLM.</strong> Paged attention, continuous batching, higher throughput per GPU-second. Best for served APIs at scale or multi-tenant inference.</p>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Same OpenAI client (<code>base_url</code> + <code>api_key</code>) talks to either — and to the OCI GenAI bearer endpoint from slide 5. The model and the host are wire-compatible swaps.</p>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
