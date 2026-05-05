@@ -1016,8 +1016,8 @@ agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)<
 </section>
 
 <!-- =========================================================
-     SLIDE 10 — IN-DB ONNX EMBEDDINGS
-     The "embeddings move into the database" punchline
+     SLIDE 13 — TIER 3 / ADVANCED LEDE — ORACLEAGENTMEMORY
+     Per-user durable memory · threads · auto-extraction · context cards
      ========================================================= -->
 <section class="slide" id="slide-13">
   <div class="slide-num">13 / 28</div>
@@ -1025,43 +1025,30 @@ agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)<
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
     <span class="inactive">Stack</span>
-    <span class="inactive">Beginner</span>
-    <span class="active">Intermediate</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
   </div>
   <div class="slide-content">
-    <div class="section-eyebrow reveal" contenteditable="false">Embeddings move <em>into</em> the database</div>
-    <h2 class="section-title reveal" contenteditable="false">Same model. <em>No</em> Python embedder process.</h2>
-    <div class="two-col reveal">
-      <div class="col-stack">
-        <p class="section-lede" contenteditable="false">Tier 1 ran <code>HuggingFaceEmbeddings</code> in Python. Tier 2 registers the <em>same</em> MiniLM-L6-v2 ONNX model <strong>inside</strong> Oracle and calls <code>VECTOR_EMBEDDING(MODEL ... USING text)</code> as a SQL primitive.</p>
-        <ul class="bullets" contenteditable="false">
-          <li>Register once via the <code>onnx2oracle</code> CLI</li>
-          <li>One round-trip: query in, vector out, all in-database</li>
-          <li>Embeddings + vector search + relational filters in <em>one</em> SQL plan</li>
-          <li>No Python dependency on the retrieval path</li>
-        </ul>
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 3 · Advanced</div>
+    <h2 class="section-title reveal" contenteditable="false"><code>oracleagentmemory</code> — per-user durable memory. <em>Not</em> just a chat log.</h2>
+    <div class="arch reveal">
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Threads</div>
+        <div class="arch-title" contenteditable="false">(user_id, agent_id) conversations</div>
+        <div class="arch-detail" contenteditable="false">Per-turn timestamps. Cold→warm recovery via UUID. <code>client.get_thread(saved_id)</code> on a fresh process returns the same conversation.</div>
       </div>
-      <pre class="code" contenteditable="false"><span class="com"># 1. Register the ONNX model (one-time)</span>
-$ onnx2oracle export --preset all-MiniLM-L6-v2 \
-                     --output minilm.onnx
-$ onnx2oracle import \
-    --dsn user/pwd@host:port/service \
-    --onnx minilm.onnx \
-    --model-name MY_MINILM_V1
-
-<span class="com"># 2. Embed and search in one SQL pass</span>
-<span class="kw">SELECT</span> id, text,
-       <span class="fn">VECTOR_DISTANCE</span>(
-         embedding,
-         <span class="fn">VECTOR_EMBEDDING</span>(
-           <span class="em">MY_MINILM_V1</span> <span class="kw">USING</span> :q
-         ),
-         <span class="kw">COSINE</span>
-       ) <span class="kw">AS</span> dist
-<span class="kw">FROM</span>   chunks
-<span class="kw">ORDER BY</span> dist
-<span class="kw">FETCH FIRST</span> 4 <span class="kw">ROWS ONLY</span>;</pre>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Durable memory</div>
+        <div class="arch-title" contenteditable="false">add_memory · search</div>
+        <div class="arch-detail" contenteditable="false">Scoped to user + agent. Auto-extracted from messages when an LLM is wired in (frequency=2, window=4).</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Context cards</div>
+        <div class="arch-title" contenteditable="false">thread.get_context_card()</div>
+        <div class="arch-detail" contenteditable="false">Prompt-ready XML synopsis — topics, summary, relevant memories. No prompt-stuffing, no hand-rolled summaries.</div>
+      </div>
     </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">The v3 advanced retrofit replaced ~250 LOC of hand-rolled chat-history + session-summary plumbing with ~30 LOC of OAMP wiring. Three primitives, one PyPI package (<code>oracleagentmemory==26.4</code>), same Oracle connection. See slide 23 for the three projects it powers.</p>
   </div>
 </section>
 
