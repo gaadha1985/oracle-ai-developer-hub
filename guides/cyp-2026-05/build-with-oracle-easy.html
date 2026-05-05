@@ -1095,6 +1095,56 @@ agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)<
 </section>
 
 <!-- =========================================================
+     SLIDE 15 — IN-DB ONNX + onnx2oracle
+     Same model, no Python embedder process
+     ========================================================= -->
+<section class="slide" id="slide-15">
+  <div class="slide-num">15 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Embeddings live <em>inside</em> Oracle</div>
+    <h2 class="section-title reveal" contenteditable="false">Same model. <em>No</em> Python embedder process.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">Most projects ship a separate Python embedder process: a model file on disk, a HuggingFace import, its own failure mode. <code>onnx2oracle</code> registers the same MiniLM-L6-v2 ONNX model <strong>inside</strong> Oracle so embedding becomes a SQL primitive — same connection as the rest of your retrieval path.</p>
+        <ul class="bullets" contenteditable="false">
+          <li>Register once via the <code>onnx2oracle</code> CLI</li>
+          <li>One round-trip: query in, vector out, all in-database</li>
+          <li>Embeddings + vector search + relational filters in <em>one</em> SQL plan</li>
+          <li><code>OracleVS</code> and <code>oracleagentmemory</code> share one embedder, one schema, one operational story</li>
+        </ul>
+      </div>
+<pre class="code" contenteditable="false"><span class="com"># 1. Register the ONNX model (one-time)</span>
+$ onnx2oracle export --preset all-MiniLM-L6-v2 \
+                     --output minilm.onnx
+$ onnx2oracle import \
+    --dsn user/pwd@host:port/service \
+    --onnx minilm.onnx \
+    --model-name MY_MINILM_V1
+
+<span class="com"># 2. Embed and search in one SQL pass</span>
+<span class="kw">SELECT</span> id, text,
+       <span class="fn">VECTOR_DISTANCE</span>(
+         embedding,
+         <span class="fn">VECTOR_EMBEDDING</span>(
+           <span class="em">MY_MINILM_V1</span> <span class="kw">USING</span> :q <span class="kw">AS</span> data
+         ),
+         <span class="kw">COSINE</span>
+       ) <span class="kw">AS</span> dist
+<span class="kw">FROM</span>   chunks
+<span class="kw">ORDER BY</span> dist
+<span class="kw">FETCH FIRST</span> 4 <span class="kw">ROWS ONLY</span>;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 16 — TIER 3 / ADVANCED INTRO
      Six memory types · self-memory · JSON Duality
      ========================================================= -->
