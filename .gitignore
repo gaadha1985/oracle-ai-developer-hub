@@ -228,3 +228,5 @@ notebooks/config.yaml
 !apps/tanstack-shoe-store/src/lib/
 !apps/tanstack-shoe-store/src/lib/**
 !apps/tanstack-shoe-store/.vscode/
+
+choose-your-path/tests/
