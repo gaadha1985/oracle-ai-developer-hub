@@ -160,6 +160,10 @@ Order matters — invocation of building-block skills happens **before** project
 - Target dir non-empty.
 - The user picks a non-Oracle DB or non-Python language. Print "out of scope for v1" and stop.
 
+## When to graduate to OAMP
+
+If you grow this beginner project into a multi-user app — different humans hitting the same backend, each wanting their own preferences and durable facts remembered across sessions — swap the manual `OracleChatHistory` layer for **OAMP** (`oracleagentmemory` PyPI package). OAMP gives you per-user threads, automatic memory extraction, and prompt-ready context cards out of the box, and the advanced tier already wires it for you. See `shared/references/oamp.md` for the decision tree (OAMP vs. OracleVS vs. OracleChatHistory vs. plain SQL). Until then, stay on `OracleChatHistory` — single-user, full transcript visibility, no LLM-extraction cost.
+
 ## What you must NOT do
 
 - Don't write raw `CREATE TABLE ... VECTOR(...)` DDL — `OracleVS.from_texts` (via the helper skill's bootstrap dance) handles it.

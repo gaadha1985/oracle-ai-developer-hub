@@ -22,6 +22,14 @@ dependencies = [
     "python-dotenv>=1.0",
     "pydantic>=2",
 
+    # OAMP — conversational + per-user durable memory.
+    # Used by advanced tier ideas 1 (hybrid analyst) and 2 (self-improving
+    # research agent). Idea 3 (schema designer) does NOT need it; beginner
+    # and intermediate tiers do NOT need it (single-user, OracleChatHistory
+    # is enough). The skill comments this line back out for those tiers.
+    # See shared/references/oamp.md.
+    "oracleagentmemory>=26.4",
+
     # ── Inference: Ollama (beginner default, intermediate fallback) ──
     # "langchain-ollama>=0.2",
 

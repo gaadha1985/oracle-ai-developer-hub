@@ -185,6 +185,10 @@ Order matters: building-block skills first, then project code.
 - `sql_mode=read_write` without explicit user `y`.
 - Verify fails 3 times.
 
+## When to graduate to OAMP
+
+If you grow this intermediate project into a multi-user agent — multiple humans, each wanting their preferences and durable facts auto-extracted and recalled across sessions — swap the manual chat history layer for **OAMP** (`oracleagentmemory` PyPI package). OAMP owns per-user threads, automatic memory extraction, and prompt-ready context cards; the advanced tier wires it via `shared/snippets/oamp_helpers.py` against the same in-DB ONNX embedder + Grok-4 you're using here. See `shared/references/oamp.md` for the OAMP-vs-OracleVS-vs-OracleChatHistory-vs-SQL decision tree. Until then, the manual chat history is correct for single-user demos.
+
 ## What you must NOT do
 
 - Don't bypass the metadata-as-string monkeypatch (`langchain-oracledb-helper` includes it; just don't remove the import).

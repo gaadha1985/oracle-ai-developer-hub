@@ -993,14 +993,14 @@ $ onnx2oracle import \
         <div class="badge-num">3.1</div>
         <div class="badge-tier" contenteditable="false">Hybrid analyst</div>
         <div class="badge-title" contenteditable="false">Production-feeling data analyst</div>
-        <div class="badge-desc" contenteditable="false">Routes each turn: data → SQL family, knowledge → vector family, both → fuses. Glossary + runbooks + decisions <em>and</em> live schema, single agent.</div>
+        <div class="badge-desc" contenteditable="false">Routes each turn: data → SQL family, knowledge → vector family, both → fuses. Glossary + runbooks + decisions <em>and</em> live schema, single agent. Per-user durable memory via <code>oracleagentmemory</code>.</div>
         <div class="badge-meta" contenteditable="false">demo: "explain this churn spike using our runbooks"</div>
       </div>
       <div class="badge">
         <div class="badge-num">3.2</div>
         <div class="badge-tier" contenteditable="false">Self-improving researcher</div>
         <div class="badge-title" contenteditable="false">AutoGPT-shape · constrained to Oracle</div>
-        <div class="badge-desc" contenteditable="false">Three memory types: <code>TOOL_REGISTRY</code> (relational), <code>TOOL_RUNS</code> (vector), <code>SESSION_SUMMARIES</code> (vector). Future runs retrieve from past tool outcomes before acting.</div>
+        <div class="badge-desc" contenteditable="false">Mixed memory: <code>TOOL_REGISTRY</code> (SQL counters), <code>TOOL_RUNS</code> (OracleVS telemetry), session summaries via <code>oracleagentmemory</code>. Right tool for each memory shape, all in Oracle.</div>
         <div class="badge-meta" contenteditable="false">demo: cold→kill→warm verbatim recall</div>
       </div>
       <div class="badge">
@@ -1011,7 +1011,7 @@ $ onnx2oracle import \
         <div class="badge-meta" contenteditable="false">demo: "track pottery commissions" → live schema</div>
       </div>
     </div>
-    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Each idea is ~700–1100 LOC of <em>application</em> code — the rest is composed from <code>oracle-aidb-docker-setup</code>, <code>langchain-oracledb-helper</code>, and <code>oracle-mcp-server-helper</code>.</p>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Each idea is ~550–950 LOC of <em>application</em> code — the rest is composed from <code>oracle-aidb-docker-setup</code>, <code>langchain-oracledb-helper</code>, <code>oracle-mcp-server-helper</code>, and (where memory is conversational) <code>oracleagentmemory</code>.</p>
   </div>
 </section>
 
@@ -1034,7 +1034,7 @@ $ onnx2oracle import \
     <div class="two-col reveal">
       <div class="col-stack">
         <p class="section-lede" contenteditable="false">In the v2 walk-through, an agent fetched the AI Vector Search guide, summarised it, and stored the summary in a JSON Duality View. We killed the FastAPI process. A fresh process — different PID, empty Python heap — answered a follow-up question with the stored text <strong>verbatim</strong>.</p>
-        <p class="section-lede" contenteditable="false">No vector cache replay. No serialised chain state. Just SQL.</p>
+        <p class="section-lede" contenteditable="false">No vector cache replay. No serialised chain state. Just SQL — or, in v3, just <code>oracleagentmemory.get_thread(saved_id)</code> over the same SQL.</p>
       </div>
       <pre class="code" contenteditable="false"><span class="com"># Process A — store</span>
 view.<span class="fn">insert</span>({
