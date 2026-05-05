@@ -893,7 +893,50 @@ llm = <span class="fn">ChatOpenAI</span>(
 </section>
 
 <!-- =========================================================
-     SLIDE 9 — INTERMEDIATE USE CASES
+     SLIDE 10 — OLLAMA MCP
+     Same MCP protocol against a local model
+     ========================================================= -->
+<section class="slide" id="slide-10">
+  <div class="slide-num">10 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Same protocol · your model · your hardware</div>
+    <h2 class="section-title reveal" contenteditable="false">Same protocol. <em>Your</em> model on <em>your</em> hardware.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">MCP isn't OCI-specific. The <strong>same Oracle MCP server</strong> from slide 9 speaks to Ollama running a local model — the four tools (<code>list_tables</code>, <code>describe_table</code>, <code>run_sql</code>, <code>vector_search</code>) don't change.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><code>ollama serve</code> on <code>:11434</code> — OpenAI-compat endpoint</li>
+          <li><code>Qwen3.5-35B-A3B</code> at INT4 — fits a 24 GB A10</li>
+          <li>MCP client config points at the same Oracle MCP server</li>
+          <li>Falls back to Grok-4 over OCI when local hardware is unavailable</li>
+        </ul>
+        <p class="section-lede" contenteditable="false"><strong>Caveat.</strong> Tool-call quality tracks model quality. Qwen3.5-35B-A3B is the floor we recommend; smaller models will hallucinate tool arguments under load.</p>
+      </div>
+<pre class="code" contenteditable="false"><span class="kw">from</span> langchain_openai <span class="kw">import</span> ChatOpenAI
+
+<span class="com"># Local Ollama, OpenAI-compatible endpoint</span>
+llm = <span class="fn">ChatOpenAI</span>(
+    model=<span class="str">"qwen3.5:35b-a3b"</span>,
+    base_url=<span class="str">"http://localhost:11434/v1"</span>,
+    api_key=<span class="str">"ollama"</span>,         <span class="com"># any non-empty string</span>
+).<span class="fn">bind_tools</span>(oracle_mcp_tools)
+
+<span class="com"># Same agent loop. Same Oracle MCP server.</span>
+<span class="com"># Different inference plane.</span>
+agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)</pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 12 — INTERMEDIATE USE CASES
      Three projects: NL2SQL · schema-doc generator · hybrid retrieval
      ========================================================= -->
 <section class="slide" id="slide-12">
