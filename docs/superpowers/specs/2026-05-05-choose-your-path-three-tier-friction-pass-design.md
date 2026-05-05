@@ -8,7 +8,7 @@
 
 Walk the `choose-your-path` skill set as a real user across **four scaffolded projects** (one beginner, one intermediate, two advanced), against a live Oracle 26ai Free container and the OCI Generative AI Grok 4 endpoint already verified on this machine. Capture every point of friction. Feed those findings back into the skills as edits so the next user — typically an Oracle DevRel influencer — meets minimal resistance.
 
-The deliverable is **not** four scaffolded apps. The deliverable is a set of **skill edits** (committed to the developer hub) and an **evidence trail** (the four working scaffolds, each with `verify.py` green and one captured chat exchange) that justifies them.
+The deliverable is **not** four scaffolded apps. The deliverable is a set of **skill edits** (committed to the developer hub) and an **evidence trail** (the four working scaffolds, each with `verify.py` green and one captured chat exchange) that justifies them. but, also the scaffolded apps need to be build and everything, so they are also deliverables for this testing.
 
 ## Why now
 
@@ -21,9 +21,9 @@ The deliverable is **not** four scaffolded apps. The deliverable is a set of **s
 | Tier | Project | Path skill | Notes |
 | --- | --- | --- | --- |
 | beginner | PDFs-to-chat (idea 1 of 3) | `choose-your-path/beginner/SKILL.md` | Most friction-prone of the three (PDF chunking is the canonical beginner stumble). Python-side MiniLM embeddings (`HuggingFaceEmbeddings`, 384 dim). |
-| intermediate | NL2SQL data explorer (idea 1 of 3) **+ SQLcl-tee logging extension** | `choose-your-path/intermediate/SKILL.md` | The SQLcl tee is **new surface area** not in the skill today. Captures every SQL the agent runs into a human-readable log via `sql -L /path/to/script.sql` invoked from a logging hook in the FastAPI adapter. Friction-finding pass will decide whether to fold this into the skill or leave it as an opt-in extension. |
-| advanced | Hybrid analyst (idea 1 of 3) | `choose-your-path/advanced/SKILL.md` | Multi-collection `OracleVS` (GLOSSARY / RUNBOOKS / DECISIONS / CONVERSATIONS) + MCP + chat history. The "what would I actually ship at work" angle. |
-| advanced | Self-improving research agent (idea 2 of 3) | `choose-your-path/advanced/SKILL.md` | Oracle-as-only-state-store with persistent agent memory. Run-twice memory-recall is the verify pivot. |
+| intermediate | NL2SQL data explorer (idea 1 of 3) **+ SQLcl-tee logging extension** | `choose-your-path/intermediate/SKILL.md` | MCP is the headline — SQLcl tee is supporting evidence (human-readable logs of every SQL the agent issues). The SQLcl tee is **new surface area** not in the skill today; friction-finding pass decides whether to fold it into the skill or leave it as an opt-in extension. ONNX export-and-register follows `github.com/jasperan/onnx2oracle` as the canonical known-good reference; any divergence between the intermediate skill's instructions and onnx2oracle becomes a friction finding. |
+| advanced | Hybrid analyst (idea 1 of 3) | `choose-your-path/advanced/SKILL.md` | Multi-collection `OracleVS` (GLOSSARY / RUNBOOKS / DECISIONS / CONVERSATIONS) + MCP + chat history. The "what would I actually ship at work" angle. ONNX export-and-register follows `github.com/jasperan/onnx2oracle`; divergence is a finding. |
+| advanced | Self-improving research agent (idea 2 of 3) | `choose-your-path/advanced/SKILL.md` | Oracle-as-only-state-store with persistent agent memory. Run-twice memory-recall is the verify pivot. ONNX export-and-register follows `github.com/jasperan/onnx2oracle`; divergence is a finding. |
 
 Each project lands in `choose-your-path/tests/<run-name>/` (gitignored). The four runs are:
 
