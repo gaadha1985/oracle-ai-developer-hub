@@ -1316,6 +1316,52 @@ thread = client.<span class="fn">create_thread</span>(user_id, agent_id)</pre>
 </section>
 
 <!-- =========================================================
+     SLIDE 21 — DISTILLATION + REASONING TRACES
+     Big teacher generates traces; small student fine-tunes on them
+     ========================================================= -->
+<section class="slide" id="slide-21">
+  <div class="slide-num">21 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Big teacher · small student · traces in between</div>
+    <h2 class="section-title reveal" contenteditable="false">Big teacher, small student — and the <em>traces</em> in between.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">When the deployed model has to be small (latency, cost, on-device) but the answers should look big-model-shaped, distillation moves the reasoning capacity instead of the weights.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><strong>Teacher.</strong> Qwen3.5-35B-A3B or Grok-4 generates a chain-of-thought reasoning trace per question.</li>
+          <li><strong>Trace splitter.</strong> <code>split_reasoning.py</code> segments each trace into <code>(prompt, reasoning, answer)</code> triples.</li>
+          <li><strong>Student.</strong> Smaller Qwen (e.g. 7B) is fine-tuned on the triples — supervised, no RL.</li>
+          <li><strong>Result.</strong> The student produces teacher-shaped reasoning at student-shaped cost.</li>
+        </ul>
+      </div>
+<pre class="code" contenteditable="false"><span class="com"># 1. Teacher generates reasoning traces</span>
+$ python apps/agent-reasoning/<span class="fn">generate_reasoning_outputs</span>.py \
+    --model qwen3.5:35b-a3b \
+    --questions data/questions.jsonl \
+    --out traces/raw.jsonl
+
+<span class="com"># 2. Split each trace into (prompt, reasoning, answer)</span>
+$ python apps/agent-reasoning/<span class="fn">split_reasoning</span>.py \
+    --in  traces/raw.jsonl \
+    --out traces/triples.jsonl
+
+<span class="com"># 3. Fine-tune the student on the triples</span>
+$ trl sft --model qwen3.5:7b \
+          --dataset traces/triples.jsonl \
+          --output_dir student-7b-distilled</pre>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Oracle isn't shipping this pipeline — but it's how every workshop attendee should be thinking about deploying small models locally on the same A10 box.</p>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
