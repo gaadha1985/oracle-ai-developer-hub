@@ -806,8 +806,8 @@ vs = OracleVS.<span class="fn">from_documents</span>(
 </section>
 
 <!-- =========================================================
-     SLIDE 7 — BEARER-TOKEN AUTH
-     The "no tenancy needed" punchline
+     SLIDE 8 — TIER 2 / INTERMEDIATE LEDE — ORACLE MCP
+     Tools, not schemas
      ========================================================= -->
 <section class="slide" id="slide-8">
   <div class="slide-num">08 / 28</div>
@@ -815,39 +815,35 @@ vs = OracleVS.<span class="fn">from_documents</span>(
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
     <span class="inactive">Stack</span>
-    <span class="active">Beginner</span>
-    <span class="inactive">Intermediate</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
   </div>
   <div class="slide-content">
-    <div class="section-eyebrow reveal" contenteditable="false">Auth — the part that used to take a day</div>
-    <h2 class="section-title reveal" contenteditable="false">One <code>sk-…</code> key. <em>Zero</em> ceremony.</h2>
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 2 · Intermediate</div>
+    <h2 class="section-title reveal" contenteditable="false">Oracle MCP — the model calls <em>tools</em>, not <em>schemas</em>.</h2>
     <div class="two-col reveal">
       <div class="col-stack">
-        <p class="section-lede" contenteditable="false">The OCI Generative AI service exposes an OpenAI-compatible bearer-token endpoint at <code>us-phoenix-1</code>. You don't need <code>~/.oci/config</code>, a compartment OCID, or the SigV1 signer dance. You don't even need a full OCI tenancy.</p>
-        <ul class="bullets" contenteditable="false">
-          <li>Generate the key in the OCI GenAI service console</li>
-          <li>Drop it in <code>.env</code> as <code>OCI_GENAI_API_KEY</code></li>
-          <li>Use the upstream <code>openai</code> Python SDK — no shim</li>
-          <li>Same wire format your other OpenAI code already speaks</li>
-        </ul>
+        <p class="section-lede" contenteditable="false"><strong>Without MCP</strong>, you stuff the schema into the system prompt — ~600 tokens of <code>CREATE TABLE</code>s and indexes, and you pray the model doesn't hallucinate a column. Cost climbs with every table; reliability drops with every join.</p>
+        <p class="section-lede" contenteditable="false"><strong>With Oracle MCP</strong>, the model has four tools and zero schema in the prompt. It picks <code>list_tables</code> when it needs the surface, <code>describe_table</code> when it needs columns, <code>run_sql</code> when it has the query, <code>vector_search</code> when it has only a question.</p>
       </div>
-      <pre class="code" contenteditable="false"><span class="kw">from</span> openai <span class="kw">import</span> OpenAI
-<span class="kw">import</span> os
+<pre class="code" contenteditable="false"><span class="com"># Oracle MCP server exposes four tools.</span>
+<span class="com"># The agent picks; Oracle answers.</span>
 
-client = <span class="fn">OpenAI</span>(
-    <span class="em">base_url</span>=<span class="str">"https://inference.generativeai."</span>
-             <span class="str">"us-phoenix-1.oci.oraclecloud.com/v1"</span>,
-    <span class="em">api_key</span>=os.environ[<span class="str">"OCI_GENAI_API_KEY"</span>],
+tools = [
+    <span class="fn">ListTables</span>(),                          <span class="com"># schema discovery</span>
+    <span class="fn">DescribeTable</span>(),                       <span class="com"># columns + indexes</span>
+    <span class="fn">RunSQL</span>(mode=<span class="str">"read_only"</span>),              <span class="com"># SELECTs by default</span>
+    <span class="fn">VectorSearch</span>(model=<span class="str">"MY_MINILM_V1"</span>),    <span class="com"># in-DB ONNX</span>
+]
+
+agent = <span class="fn">create_react_agent</span>(
+    llm=<span class="fn">ChatOpenAI</span>(model=<span class="str">"xai.grok-4"</span>),
+    tools=tools,
 )
 
-resp = client.chat.completions.<span class="fn">create</span>(
-    model=<span class="str">"xai.grok-4"</span>,   <span class="com"># full id required</span>
-    messages=[{<span class="str">"role"</span>: <span class="str">"user"</span>,
-               <span class="str">"content"</span>: <span class="str">"Reply OK."</span>}],
-    max_tokens=8,
-)
-<span class="fn">print</span>(resp.choices[0].message.content)  <span class="com"># OK</span></pre>
+<span class="com"># The agent doesn't memorize your schema. It asks.</span></pre>
     </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Bearer-token auth still applies — the same <code>OCI_GENAI_API_KEY</code> env var from slide 5 picks up here. The difference is what the model sees: in slide 5 it sees text, in slide 8 it sees <em>tools</em>.</p>
   </div>
 </section>
 
