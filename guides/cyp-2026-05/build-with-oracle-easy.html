@@ -1362,6 +1362,43 @@ $ trl sft --model qwen3.5:7b \
 </section>
 
 <!-- =========================================================
+     SLIDE 22 — PICOORACLAW
+     Coding agent on OpenAI-compat endpoints, Oracle as storage
+     ========================================================= -->
+<section class="slide" id="slide-22">
+  <div class="slide-num">22 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Coding agent · OpenAI-compat · Oracle storage</div>
+    <h2 class="section-title reveal" contenteditable="false"><code>picooraclaw</code> — a Go coding agent. Oracle is its <em>memory</em>.</h2>
+    <div class="arch reveal">
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Inference</div>
+        <div class="arch-title" contenteditable="false">OpenAI-compat I/O</div>
+        <div class="arch-detail" contenteditable="false">Bring your own endpoint: OCI GenAI, Ollama, vLLM, OpenAI. Same wire format, swap by env var.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Storage</div>
+        <div class="arch-title" contenteditable="false">Oracle 26ai</div>
+        <div class="arch-detail" contenteditable="false">Sessions, conversations, tool runs, snapshots. Replaces SQLite/Postgres in the upstream Picoclaw.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Posture</div>
+        <div class="arch-title" contenteditable="false">DB-as-only-store</div>
+        <div class="arch-detail" contenteditable="false">Same invariant as the advanced choose-your-path tier. No Redis, no Chroma, no hidden caches.</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Snapshot fork of <a href="https://github.com/picoclaw/picoclaw" style="color: var(--accent);">Picoclaw</a> with an Oracle layer applied on top — clean isolation so it tracks upstream. Sync method: cherry-pick upstream onto a fresh branch + reapply the Oracle layer as one commit. Sibling forks: <code>oraclaw</code> (TypeScript / openclaw), <code>zerooraclaw</code> (zeroclaw).</p>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
