@@ -715,7 +715,55 @@
 </section>
 
 <!-- =========================================================
-     SLIDE 6 — BEGINNER USE CASES
+     SLIDE 6 — MULTI-SOURCE RAG (PDFs + web), beginner tier
+     Same chunking, same embedder, different loaders
+     ========================================================= -->
+<section class="slide" id="slide-6">
+  <div class="slide-num">06 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="active">Beginner</span>
+    <span class="inactive">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 1 · same pipeline, two corpora</div>
+    <h2 class="section-title reveal" contenteditable="false">Same chunking. Same embedder. <em>Different</em> loaders.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false"><code>langchain-oracledb</code> doesn't care whether your text came from PDFs on disk or HTML over the wire. The loader on the left changes; the storage and retrieval on the right don't.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><code>PyPDFLoader</code> — page-aware chunks with <code>source.pdf:p.N</code> citations</li>
+          <li><code>WebBaseLoader</code> — HTML scrubbed via <code>trafilatura</code>, URL kept as metadata</li>
+          <li>Same <code>OracleVS.from_documents()</code> sink either way</li>
+          <li>Mix-and-match: PDFs <em>and</em> web pages in the same collection</li>
+        </ul>
+      </div>
+<pre class="code" contenteditable="false"><span class="kw">from</span> langchain_community.document_loaders <span class="kw">import</span> (
+    PyPDFLoader, WebBaseLoader,
+)
+<span class="kw">from</span> langchain_oracledb <span class="kw">import</span> OracleVS
+
+pdf_docs = <span class="fn">PyPDFLoader</span>(<span class="str">"corpus/release-notes.pdf"</span>).<span class="fn">load</span>()
+web_docs = <span class="fn">WebBaseLoader</span>([
+    <span class="str">"https://docs.oracle.com/en/database/.../vector.html"</span>,
+]).<span class="fn">load</span>()
+
+vs = OracleVS.<span class="fn">from_documents</span>(
+    pdf_docs + web_docs,         <span class="com"># mixed corpus, same sink</span>
+    embedding=embedder,
+    client=conn,
+    table_name=<span class="str">"CORPUS"</span>,
+    distance_strategy=<span class="str">"COSINE"</span>,
+)</pre>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">The corpus shape changes; the retrieval path doesn't. Beginner badges 1.1 (PDFs) and 1.3 (web articles) ship the same <code>vs</code> object — just a different <code>load()</code> at the top.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 7 — BEGINNER USE CASES
      Three concrete projects all sharing the same skeleton
      ========================================================= -->
 <section class="slide" id="slide-7">
