@@ -140,21 +140,21 @@ with conn.cursor() as cur:
         f"CREATE VIEW, CREATE PROCEDURE TO {APP_USER}"
     )
     cur.execute(f"GRANT CREATE MINING MODEL TO {APP_USER}")
-    # Required for VECTOR_EMBEDDING(MODEL ...) — the in-DB ONNX path used by
-    # intermediate / advanced. Granting EXECUTE ON SYS.DBMS_VECTOR works
-    # from SYSTEM in 26ai Free; if your build requires SYSDBA, connect as
-    # SYS AS SYSDBA for this single GRANT.
-    try:
-        cur.execute(f"GRANT EXECUTE ON SYS.DBMS_VECTOR TO {APP_USER}")
-    except oracledb.DatabaseError as e:
-        if "ORA-01031" in str(e):  # insufficient privileges
-            raise RuntimeError(
-                "GRANT EXECUTE ON SYS.DBMS_VECTOR requires SYSDBA. "
-                "Connect as `sys/${SYS_PASSWORD}@${DB_DSN} AS SYSDBA` and "
-                "run the GRANT manually, then re-invoke this skill."
-            )
-        raise
 conn.commit()
+
+# Required for VECTOR_EMBEDDING(MODEL ...) — the in-DB ONNX path used by
+# intermediate / advanced. GRANT EXECUTE ON SYS.DBMS_VECTOR ALWAYS requires
+# SYSDBA in 26ai Free (verified during the friction pass — SYSTEM hits
+# ORA-01031). Open a separate SYSDBA connection for this one GRANT.
+sysdba_conn = oracledb.connect(
+    user="SYS",
+    password=os.environ["SYS_PASSWORD"],
+    dsn=os.environ["DB_DSN"],
+    mode=oracledb.AUTH_MODE_SYSDBA,
+)
+with sysdba_conn.cursor() as cur:
+    cur.execute(f"GRANT EXECUTE ON SYS.DBMS_VECTOR TO {APP_USER}")
+sysdba_conn.commit()
 print(f"oracle-aidb-docker-setup: created app user {APP_USER}")
 ```
 
