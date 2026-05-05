@@ -936,6 +936,44 @@ agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)<
 </section>
 
 <!-- =========================================================
+     SLIDE 11 — AI SQL GENERATION VIA ORACLE MCP + CLAUDE CODE
+     Converged DB UX — one schema, many languages
+     ========================================================= -->
+<section class="slide" id="slide-11">
+  <div class="slide-num">11 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Converged DB · one schema · many languages</div>
+    <h2 class="section-title reveal" contenteditable="false">One database. <em>Five</em> consumption layers. <em>One</em> natural-language interface.</h2>
+    <div class="stat-row reveal">
+      <div class="stat">
+        <div class="stat-val">5</div>
+        <div class="stat-label" contenteditable="false">consumption layers — relational, JSON Duality, vector, graph, Select AI</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">1</div>
+        <div class="stat-label" contenteditable="false">schema — the source of truth lives once, not per-team</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">0</div>
+        <div class="stat-label" contenteditable="false">ETL — no team needs a copy of someone else's data</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">∞</div>
+        <div class="stat-label" contenteditable="false">teams that can ask in English instead of learning each other's pipelines</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Claude Code already writes Oracle SQL well. Oracle MCP gives it the schema and the run loop. The cognitive load drops to: <em>"ask in English, get rows."</em> Two SREs and a data scientist hit the same DB through their preferred consumption layer — and the LLM doesn't need to learn five copies of their data.</p>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 12 — INTERMEDIATE USE CASES
      Three projects: NL2SQL · schema-doc generator · hybrid retrieval
      ========================================================= -->
