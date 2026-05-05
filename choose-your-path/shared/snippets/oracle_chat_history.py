@@ -77,8 +77,13 @@ class OracleChatHistory(BaseChatMessageHistory):
             )
             rows = []
             for (payload,) in cur.fetchall():
-                # oracledb 4.x can return CLOB as bytes, str, or LOB depending
-                # on the driver mode. Normalise to str then JSON-load.
+                # oracledb 4.x auto-parses IS JSON columns to dict already.
+                # Earlier driver modes returned LOB/bytes/str. Cover all four
+                # so the same code path works regardless of the installed
+                # oracledb version (v3-F-1 from cold-start friction pass).
+                if isinstance(payload, dict):
+                    rows.append(payload)
+                    continue
                 raw = payload.read() if hasattr(payload, "read") else payload
                 if isinstance(raw, (bytes, bytearray)):
                     raw = raw.decode("utf-8")

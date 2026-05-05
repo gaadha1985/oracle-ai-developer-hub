@@ -50,7 +50,7 @@ Print confirmation block. Wait for `y`.
 | `onnx_model_local_id` | `sentence-transformers/all-MiniLM-L6-v2` |
 | `onnx_model_db_name` | `MY_MINILM_V1` |
 | `llm_model` | `grok-4` (or chosen fallback) |
-| `oci_base_url` | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai` |
+| `oci_base_url` | `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com` (the OpenAI client appends `/v1`; do **not** add the legacy `/20231130/actions/openai` path — that is for SigV1, not bearer-token) |
 | `collections` | per-idea: idea 1 → `["CONVERSATIONS"]` only; idea 2 → `["SCHEMA_DOCS_DOCUMENTS", "CONVERSATIONS"]`; idea 3 → `["INVOICES_DOCS", "CONVERSATIONS"]` |
 | `mcp_sql_mode` | `read_only` (default) |
 | `mcp_allowed_tools` | per-idea (see below) |
@@ -86,28 +86,49 @@ Order matters: building-block skills first, then project code.
 ### 3c — Project-specific code (the only files this skill writes itself)
 
 10. `target_dir/.gitignore` — extend with `data/`, `INVOICE_PDFS/`, `*.onnx`, `scripts/__pycache__/`.
-11. `target_dir/pyproject.toml` — extend deps:
-    - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `openai>=1.40`, `onnx2oracle`, `Faker>=24`, `python-multipart`.
+11. `target_dir/pyproject.toml` — start from `shared/templates/pyproject.toml.template` (do NOT hand-roll one). The template already pins the correct build backend (`setuptools.build_meta`, NOT `setuptools.backends.legacy:build` — that name does not exist in `setuptools>=68` and `pip install -e .` will fail with `ModuleNotFoundError` on a fresh venv; v3 friction P0-V3-N4). Then extend `dependencies` with:
+    - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `langchain-openai>=0.2`, `langgraph>=0.2`, `openai>=1.40`, `onnx2oracle`, `Faker>=24`, `python-multipart`.
     - Idea 1: + (no extras).
     - Idea 2: + (no extras).
     - Idea 3: + `reportlab>=4`, `pypdf>=4`.
-    - **Do NOT add** `oci-openai`, `openai`, `oracle-database-mcp-server`, or hand-rolled ONNX deps. Those are friction P0-1 / P0-2 / P0-4 — superseded.
-12. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` verbatim. It uses `oci.generative_ai_inference.GenerativeAiInferenceClient` directly (the OpenAI-compat path is unstable; see friction P0-2). Model id is `xai.grok-4`.
-13. **Per-idea agent module:**
-    - **Idea 1** → `src/<package_slug>/agent.py`:
-      ```python
-      tools = get_tools()  # from tool_registry.py
-      llm = make_llm()  # Grok 4 via OCI
-      agent = create_tool_calling_agent(llm.bind_tools(tools), tools, prompt)
-      executor = AgentExecutor(agent=agent, tools=tools)
-      with_history = RunnableWithMessageHistory(executor, get_history_factory(...), ...)
-      ```
-      The prompt teaches Grok to: list_tables → describe_table → emit run_sql; return both the answer and the SQL it ran.
+    - **Do NOT add** `oci-openai`, `oci`, `oracle-database-mcp-server`, or hand-rolled ONNX deps. Those are friction P0-1 / P0-2 / P0-4 — superseded by the bearer-token + local-BaseTool + `onnx2oracle` paths.
+    - **Imports use the installed package name, not the on-disk path.** Even though sources live under `src/<package_slug>/`, the `[tool.setuptools.packages.find] where = ["src"]` line in the template means `pip install -e .` installs the package as `<package_slug>` (no `src.` prefix). Always import `from <package_slug>.foo import bar` — `from src.<package_slug>.foo` raises `ModuleNotFoundError: No module named 'src'` (v3 friction P1-V3-F-3).
+12. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` verbatim. It uses the upstream `openai` SDK against the OCI Generative AI bearer-token endpoint (`OCI_GENAI_BASE_URL` defaults to `us-phoenix-1`, auth via `OCI_GENAI_API_KEY`). Model id is the full `xai.grok-4`. The earlier OCI-SDK SigV1 path is in `archive/` only.
+13. **Per-idea agent module — IMPORTANT, read both warnings before writing code:**
+
+    **Warning A — LangChain 1.x removed `AgentExecutor` and `create_tool_calling_agent`.** They were in `langchain.agents` in 0.3.x; in 1.x the agent loop has moved to **LangGraph** (`langgraph.prebuilt.create_react_agent`) or to plain `.bind_tools()` + manual loop. **Do NOT import them from `langchain.agents`** — `ImportError` on a fresh venv (v3 friction P0-V3-N2).
+
+    **Warning B — Grok-4 over the OCI OpenAI-compat endpoint stops emitting structured `tool_calls` after ~2 turns.** On the 3rd+ tool call it returns plain text like `Function: run_sql({"query": "..."})` instead of an OpenAI-shape `tool_calls` object, which LangGraph + LangChain agents cannot parse. The reliable shape at this tier is therefore a **2-step pipeline**, not an open agent loop (v3 friction P0-V3-N3):
+
+    ```python
+    # src/<package_slug>/agent.py — 2-step pipeline (canonical)
+    from <package_slug>.inference import get_chat_client
+    from <package_slug>.tool_registry import get_tools
+
+    def answer(user_q: str) -> dict:
+        tools = get_tools()  # local BaseTool subclasses from shared/snippets
+        llm = get_chat_client()
+        # Step 1: LLM picks ONE tool + args (single tool_call — reliable)
+        plan = llm.bind_tools(tools).invoke([{"role": "user", "content": user_q}])
+        # Step 2: execute, then synthesise (no further tool turns)
+        results = [t.run(call["args"]) for call in plan.tool_calls
+                   for t in tools if t.name == call["name"]]
+        final = llm.invoke([
+            {"role": "user", "content": user_q},
+            {"role": "assistant", "content": str(plan.tool_calls)},
+            {"role": "tool", "content": "\n".join(map(str, results))},
+        ])
+        return {"answer": final.content, "tool_calls": plan.tool_calls,
+                "tool_results": results}
+    ```
+
+    The 2-step pipeline produces grounded answers + the SQL/tool args used, which is what the demo needs. **If a multi-step loop is essential** (e.g. idea 3's "vector then SQL then both" routing), split it into multiple top-level `answer()` calls and orchestrate from the FastAPI adapter — never let the LLM drive >2 tool turns in one call. The intermediate v3 cold-start walk proved this.
     - **Idea 2** → `src/<package_slug>/generate.py` (one-shot script that walks the schema and INSERTs rows into `SCHEMA_DOCS_DOCUMENTS` with embeddings via `VECTOR_EMBEDDING(MY_MINILM_V1 USING :description)`) + `src/<package_slug>/agent.py` (RAG over the generated docs via `vector_search` MCP tool).
     - **Idea 3** → `src/<package_slug>/agent.py` with a system prompt that explicitly teaches the agent the two-modality choice (vector for "find similar invoices to this PDF", run_sql for "sum unpaid amounts", both for "find unpaid invoices similar to X").
 14. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions` wrapping the agent (same shape as beginner; differences: handles tool-call streaming events from the agent executor, surfaces them as OpenAI-compatible "function_call" deltas).
 
     **SQLcl-tee logging (folded in by default at this tier — friction-pass decision).** Wrap the `run_sql` BaseTool with `shared/snippets/sqlcl_tee.py` so every SQL the agent emits gets teed through SQLcl into `<target>/logs/sqlcl_<ts>.log`. The wrapper appends `[sqlcl_log: <path>]` to the streamed response. Setup:
+    - **Pre-flight: check that SQLcl is installed** before scaffolding the wiring. Run `which sql` (or `command -v sql`); if not on PATH, follow the install steps in `shared/references/sqlcl-tee.md` (~/opt/sqlcl) BEFORE writing the wiring. Do NOT assume `/home/ubuntu/sqlcl/bin/sql` or any other host-specific path is present (v3 friction P2-V3-N5). The wrapper degrades gracefully when SQLcl is missing — it appends `[sqlcl_tee: skipped — SQLcl not installed]` and the inner tool result passes through — but the user loses the inspectable log, so install is strongly recommended.
     - In `src/<package_slug>/tool_registry.py`, import `from shared.snippets.sqlcl_tee import wrap_with_sqlcl_tee` and wrap the `run_sql` tool that comes back from `mcp_client.list_tools()`.
     - Document SQLcl install in the project's README (link to `shared/references/sqlcl-tee.md`).
     - Why MCP+SQLcl: MCP shows the SQL the agent emits; SQLcl shows what the DB actually did (rows, errors, plan). Together you can debug an agent turn end-to-end.

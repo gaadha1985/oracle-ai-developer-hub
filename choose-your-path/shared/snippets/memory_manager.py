@@ -126,7 +126,11 @@ class MemoryManager:
             row = cur.fetchone()
             if not row:
                 return None
-            return json.loads(row[0].read() if hasattr(row[0], "read") else row[0])
+            payload = row[0]
+            # oracledb 4.x returns IS JSON columns as dict directly.
+            if isinstance(payload, dict):
+                return payload
+            return json.loads(payload.read() if hasattr(payload, "read") else payload)
 
     # ── toolbox (catalog of tools the agent knows about; non-vector) ─────
 
@@ -143,9 +147,17 @@ class MemoryManager:
     def list_tools(self) -> list[MemoryRow]:
         with self.conn.cursor() as cur:
             cur.execute(f"SELECT name, schema FROM {self.project}_TOOLBOX ORDER BY name")
-            return [MemoryRow(id=0, content=r[0],
-                              metadata=json.loads(r[1].read() if hasattr(r[1], "read") else r[1]))
-                    for r in cur.fetchall()]
+            out = []
+            for r in cur.fetchall():
+                schema_payload = r[1]
+                # oracledb 4.x returns IS JSON columns as dict directly.
+                if isinstance(schema_payload, dict):
+                    metadata = schema_payload
+                else:
+                    raw = schema_payload.read() if hasattr(schema_payload, "read") else schema_payload
+                    metadata = json.loads(raw)
+                out.append(MemoryRow(id=0, content=r[0], metadata=metadata))
+            return out
 
     # ── entity (people/places/topics with embeddings) ────────────────────
 
