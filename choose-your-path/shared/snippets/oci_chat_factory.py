@@ -1,28 +1,36 @@
-"""Dual-auth chat client for OCI's OpenAI-compatible endpoint.
+"""Direct OCI Generative AI chat client (canonical recipe).
 
-Source: ~/git/personal/oci-genai-service/src/oci_genai_service/inference/chat.py:1-95
-
-WHY THIS EXISTS
+WHY THIS RECIPE
 ---------------
-OCI's OpenAI-compat endpoint speaks the OpenAI wire format but does NOT accept
-a bearer-token `api_key` for most tenancies — every request must be signed with
-OCI Signature V1. Plain `OpenAI(api_key="oci")` returns 401.
+The OpenAI-compatible OCI Generative AI endpoint speaks the OpenAI wire format
+but is unstable across `openai` SDK versions. With `openai>=1.x`, the
+`oci-openai` shim raises `APIConnectionError` whose underlying cause is
+`AttributeError: 'URL' object has no attribute 'decode'` — `httpx.URL` reaches
+a `urllib.parse._decode_args` that expects a string. See friction P0-2.
 
-`get_chat_client()` picks the right auth pattern:
-  * If `OCI_API_KEY` is set: bearer-token mode via the upstream `openai` client.
-    (Only some tenancies enable this.)
-  * Else: SigV1 via `oci-openai` SDK, which wraps `openai` and slips the OCI
-    signer onto every request. Reads `~/.oci/config` profile DEFAULT, or falls
-    back to InstancePrincipals when running on OCI compute.
+The direct OCI SDK path (`oci.generative_ai_inference`) is stable and
+recommended at all tiers of choose-your-path. It uses `GenericChatRequest` +
+`OnDemandServingMode` and SigV1 auth via `~/.oci/config` (or
+InstancePrincipals when running on OCI compute).
 
 USAGE
 -----
-    client = get_chat_client(region="us-chicago-1",
-                             compartment_id=os.environ["OCI_COMPARTMENT_ID"])
-    resp = client.chat.completions.create(
-        model="grok-4",
-        messages=[{"role": "user", "content": "hi"}],
-    )
+    client = get_chat_client()
+    out = chat_complete([{"role": "user", "content": "Reply OK."}])
+    # `out` is a string (the assistant message text).
+
+The model id for Grok 4 is `xai.grok-4` (not `grok-4`). Pass via
+`OCI_LLM_MODEL` env var; default is `xai.grok-4`.
+
+REQUIRED ENV
+------------
+OCI_COMPARTMENT_ID    OCID of the compartment that has GenAI enabled.
+OCI_REGION            Defaults to us-chicago-1 (Grok 4 only ships there).
+OCI_LLM_MODEL         Defaults to xai.grok-4.
+
+DEPS
+----
+oci>=2.130   (the only chat dep needed; `oci-openai` and `openai` are NOT used)
 """
 
 from __future__ import annotations
@@ -30,51 +38,79 @@ from __future__ import annotations
 import os
 from typing import Any
 
-
-def get_chat_base_url(region: str = "us-chicago-1") -> str:
-    return (
-        f"https://inference.generativeai.{region}.oci.oraclecloud.com"
-        f"/20231130/actions/openai"
-    )
+import oci
 
 
-def get_chat_client(
-    region: str = "us-chicago-1",
-    compartment_id: str | None = None,
-    api_key: str | None = None,
-) -> Any:
-    """Return an OpenAI-compatible client signed appropriately for OCI."""
-    base_url = get_chat_base_url(region)
-    api_key = api_key or os.environ.get("OCI_API_KEY")
+_chat_client: Any = None
 
-    if api_key:
-        # Pattern 2: bearer-token mode (only if your tenancy enables it).
-        from openai import OpenAI
-        return OpenAI(base_url=base_url, api_key=api_key)
 
-    # Pattern 1 (default): SigV1 via oci-openai SDK.
-    import oci
-    from oci_openai import OciOpenAI
+def get_chat_client() -> Any:
+    """Return an `oci.generative_ai_inference.GenerativeAiInferenceClient`
+    pinned to `OCI_REGION`. Module-scoped + cached. SigV1 via `~/.oci/config`,
+    InstancePrincipals if config is absent."""
+    global _chat_client
+    if _chat_client is not None:
+        return _chat_client
 
+    region = os.environ.get("OCI_REGION", "us-chicago-1")
     try:
-        config = oci.config.from_file("~/.oci/config", "DEFAULT")
-        signer = oci.signer.Signer(
-            tenancy=config["tenancy"],
-            user=config["user"],
-            fingerprint=config["fingerprint"],
-            private_key_file_location=config["key_file"],
-        )
+        config = oci.config.from_file()
+        config["region"] = region
     except Exception:
-        # On OCI compute with instance principals, no config file exists.
         from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
         signer = InstancePrincipalsSecurityTokenSigner()
+        endpoint = f"https://inference.generativeai.{region}.oci.oraclecloud.com"
+        _chat_client = oci.generative_ai_inference.GenerativeAiInferenceClient(
+            config={"region": region}, signer=signer, service_endpoint=endpoint
+        )
+        return _chat_client
 
-    if not compartment_id:
-        compartment_id = os.environ.get("OCI_COMPARTMENT_ID")
+    endpoint = f"https://inference.generativeai.{region}.oci.oraclecloud.com"
+    _chat_client = oci.generative_ai_inference.GenerativeAiInferenceClient(
+        config=config, service_endpoint=endpoint
+    )
+    return _chat_client
+
+
+def chat_complete(
+    messages: list[dict],
+    temperature: float = 0.2,
+    max_tokens: int = 512,
+) -> str:
+    """One-shot chat completion. Returns the assistant message text."""
+    client = get_chat_client()
+    model_id = os.environ.get("OCI_LLM_MODEL", "xai.grok-4")
+    if model_id == "grok-4":
+        model_id = "xai.grok-4"
+
+    compartment_id = os.environ.get("OCI_COMPARTMENT_ID")
     if not compartment_id:
         raise RuntimeError(
-            "OCI_COMPARTMENT_ID is required for SigV1 auth — set the env var "
-            "or pass compartment_id=..."
+            "OCI_COMPARTMENT_ID is required for OCI Generative AI calls."
         )
 
-    return OciOpenAI(base_url=base_url, auth=signer, compartment_id=compartment_id)
+    sdk_messages = []
+    for m in messages:
+        content = oci.generative_ai_inference.models.TextContent(text=m["content"])
+        sdk_messages.append(
+            oci.generative_ai_inference.models.Message(
+                role=m["role"].upper(), content=[content]
+            )
+        )
+
+    chat_request = oci.generative_ai_inference.models.GenericChatRequest(
+        api_format=oci.generative_ai_inference.models.BaseChatRequest.API_FORMAT_GENERIC,
+        messages=sdk_messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    chat_details = oci.generative_ai_inference.models.ChatDetails(
+        serving_mode=oci.generative_ai_inference.models.OnDemandServingMode(
+            model_id=model_id
+        ),
+        compartment_id=compartment_id,
+        chat_request=chat_request,
+    )
+
+    resp = client.chat(chat_details)
+    return resp.data.chat_response.choices[0].message.content[0].text

@@ -20,15 +20,16 @@ You write the Oracle data-layer modules. You do not write app code, chains, or U
 
 - `shared/references/langchain-oracledb.md` — load-bearing.
 - `shared/snippets/metadata_monkeypatch.py` — copy verbatim into `_monkeypatch.py`.
-- `shared/snippets/oracle_chat_history.py` — copy verbatim into `history.py`.
+- `shared/snippets/oracle_chat_history.py` — copy verbatim into `history.py` (includes the `init_table()` helper running an idempotent PL/SQL DDL block — Oracle does NOT support `CREATE TABLE IF NOT EXISTS`).
+- `shared/snippets/in_db_embeddings.py` — copy verbatim into `store.py` when `embedder == "in-db-onnx"` (this is THE `InDBEmbeddings` subclass referenced everywhere; it lives here so the helper actually ships it instead of asking the user to invent it).
 - `shared/references/onnx-in-db-embeddings.md` — only if `embedder == "in-db-onnx"`.
 
 ## Step 1 — Validate inputs
 
-- `target_dir/.env` exists and has `DB_DSN`, `DB_USER`, `DB_PASSWORD`. If not, stop — tell the user to run `oracle-aidb-docker-setup` first.
+- `target_dir/.env` exists and has `DB_DSN`, `DB_USER`, `DB_PASSWORD`. The `DB_USER` MUST be the app user that `oracle-aidb-docker-setup` Step 6 created (NOT `SYSTEM` — `SYSTEM`'s tablespace can't hold JSON columns; you'll get ORA-43853). If not, stop — tell the user to run `oracle-aidb-docker-setup` first.
 - `package_slug` matches `[a-z][a-z0-9_]*`. Reject otherwise.
 - `collections` non-empty. Naming: `<PROJECT_PREFIX>_<KIND>` enforced — e.g. for slug `pdf_chat` and kind `DOCUMENTS`, the actual table name is `PDF_CHAT_DOCUMENTS`. Document this in the file's docstring.
-- For `embedder == "in-db-onnx"`, confirm the user has a registered ONNX model name. If not, stop — point them at `shared/references/onnx-in-db-embeddings.md` step 3.
+- For `embedder == "in-db-onnx"`, confirm the user has a registered ONNX model name. If not, stop — point them at `shared/references/onnx-in-db-embeddings.md` step 3 (the `onnx2oracle` recipe).
 
 ## Step 2 — Pick embedding dim
 
@@ -73,17 +74,22 @@ Owns:
 
 Cites:
 - shared/references/langchain-oracledb.md
-- apps/agentic_rag/src/OraDBVectorStore.py:1-100
+- shared/snippets/in_db_embeddings.py (when embedder=in-db-onnx)
 """
 from . import _monkeypatch  # noqa: F401  -- must be first
 
 import os
 import oracledb
 from langchain_oracledb.vectorstores.oraclevs import OracleVS
+
+# DistanceStrategy lives in langchain_community — `langchain-oracledb` does
+# NOT re-export it. Friction P1-1.
+from langchain_community.vectorstores.utils import DistanceStrategy
+
 # ... embedder import per choice ...
 
 PROJECT_PREFIX = "<UPPER_PACKAGE_SLUG>"
-EXPECTED_DIM = <384 | 768 | 1024>
+EXPECTED_DIM = <384 (MiniLM-L6-v2) | 1024 (cohere)>
 
 _conn = None
 _embedder = None
@@ -101,7 +107,7 @@ def get_connection() -> oracledb.Connection:
 def get_embedder():
     global _embedder
     if _embedder is None:
-        _embedder = <embedder factory call>
+        _embedder = <embedder factory call>  # see "Step 2 — Pick embedding dim"
     return _embedder
 
 def get_store(kind: str) -> OracleVS:
@@ -110,7 +116,7 @@ def get_store(kind: str) -> OracleVS:
         client=get_connection(),
         embedding_function=get_embedder(),
         table_name=table,
-        distance_strategy="COSINE",
+        distance_strategy=DistanceStrategy.COSINE,
     )
 
 def bootstrap() -> None:
@@ -121,6 +127,24 @@ def bootstrap() -> None:
         ids = store.add_texts(["__bootstrap__"], metadatas=[{"_skip": True}])
         store.delete(ids)
 ```
+
+Embedder factory expressions:
+
+- `embedder == "minilm-py"`:
+  ```python
+  from langchain_huggingface import HuggingFaceEmbeddings
+  _embedder = HuggingFaceEmbeddings(model_name=os.environ.get(
+      "EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+  ))
+  ```
+- `embedder == "in-db-onnx"`: copy `shared/snippets/in_db_embeddings.py` verbatim into the project as `src/<package_slug>/in_db_embeddings.py`, then:
+  ```python
+  from .in_db_embeddings import InDBEmbeddings
+  _embedder = InDBEmbeddings(get_connection(), model_db_name=os.environ.get(
+      "ONNX_MODEL_NAME", "MY_MINILM_V1"
+  ))
+  ```
+- `embedder == "oci-cohere"`: copy `shared/snippets/oci_cohere_embeddings.py` per its docstring.
 
 Replace placeholders with concrete values from inputs. The bootstrap dance is the load-bearing trick — `OracleVS.from_texts` creates the table on first call; subsequent calls are no-ops.
 
@@ -136,20 +160,26 @@ def get_history_factory(conn):
     return _factory
 ```
 
-Then `migrations/001_chat_history.sql`:
+Then `migrations/001_chat_history.sql` (Oracle does NOT support `CREATE TABLE IF NOT EXISTS` — wrap DDL in a PL/SQL anonymous block that swallows ORA-00955; matches the snippet's `INIT_DDL`):
 
 ```sql
-CREATE TABLE IF NOT EXISTS chat_history (
-    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    session_id VARCHAR2(128) NOT NULL,
-    role VARCHAR2(16) NOT NULL,
-    content CLOB NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id, created_at);
+BEGIN
+    EXECUTE IMMEDIATE q'[
+        CREATE TABLE chat_history (
+            session_id VARCHAR2(120) NOT NULL,
+            seq        NUMBER GENERATED ALWAYS AS IDENTITY,
+            payload    CLOB CHECK (payload IS JSON),
+            created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+            PRIMARY KEY (session_id, seq)
+        )
+    ]';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLCODE != -955 THEN RAISE; END IF;
+END;
+/
 ```
 
-The tier skill is responsible for running this migration during bootstrap. Document that requirement in the docstring at the top of `history.py`.
+Schema matches the snippet's contract (single CLOB payload validated as JSON). The tier skill is responsible for running this migration during bootstrap (or calling `history.init_table(get_connection())`). Document that requirement in the docstring at the top of `history.py`.
 
 ## Step 6 — Smoke
 

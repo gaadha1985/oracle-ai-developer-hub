@@ -90,10 +90,11 @@ Order matters — invocation of building-block skills happens **before** project
 
 5. `target_dir/.gitignore` — extend with `data/`, `*.pdf`, `notes/`.
 6. `target_dir/pyproject.toml` — extend deps:
-   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-openai>=0.2`, `oci-openai>=0.1`, `oci>=2.130`, `langchain-huggingface>=0.1`, `sentence-transformers>=2.7`.
+   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `oci>=2.130`, `langchain-huggingface>=0.1`, `sentence-transformers>=2.7`.
    - Idea 1 (PDFs): + `pypdf>=4`.
    - Idea 2 (Markdown): + `markdown-it-py>=3`.
    - Idea 3 (Web): + `trafilatura>=1.10`, `httpx>=0.27`.
+   - **Do NOT add** `oci-openai` or `openai` — friction P0-2; the OpenAI-compat path is unstable. The chat factory at `shared/snippets/oci_chat_factory.py` uses the direct OCI SDK.
 7. `target_dir/.env.example` — append:
    ```
    OCI_COMPARTMENT_ID=
@@ -101,7 +102,7 @@ Order matters — invocation of building-block skills happens **before** project
    OCI_LLM_MODEL=grok-4
    EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
    ```
-8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat). For the embedder, write a tiny factory:
+8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat — uses the direct OCI SDK, model id `xai.grok-4`). For the embedder, write a tiny factory:
    ```python
    from langchain_huggingface import HuggingFaceEmbeddings
    _embedder = None
@@ -120,7 +121,7 @@ Order matters — invocation of building-block skills happens **before** project
 11. `src/<package_slug>/adapter.py` — FastAPI app exposing `/v1/chat/completions` (OpenAI-compatible). Body shape matches what Open WebUI sends; map `messages[-1].content` to the chain input, return assistant message in OpenAI shape. Stream via `text/event-stream`.
 12. `verify.py` — copy `shared/templates/verify.template.py`, fill in:
     - `inference_enabled = True`.
-    - Round-trip: `embedder.embed_query("dim check")` → assert dim == 1024.
+    - Round-trip: `embedder.embed_query("dim check")` → assert dim == 384.
     - Smoke a single chain call against a tiny known corpus (3 lines of test text).
 13. `README.md` — copy `shared/templates/readme.template.md`, fill placeholders. The "Why Oracle" paragraph names: AI Vector Search, `OracleVS`, persistent chat history (`OracleChatHistory`). Include a "Stack" section listing OCI GenAI Grok 4, `sentence-transformers/all-MiniLM-L6-v2` (Python-side, 384 dim — same model intermediate/advanced register *inside* Oracle for in-DB embeddings), `langchain-oracledb`, Open WebUI. Leave the screenshot slot for the chat UI.
 

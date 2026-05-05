@@ -65,7 +65,7 @@ Per-idea collections + tools:
 1. Refuse if `target_dir` is non-empty.
 2. **Invoke `skills/oracle-aidb-docker-setup`.** Block until OK.
 3. Append the **Open WebUI** service to the generated compose file (same as beginner / intermediate).
-4. **Run the ONNX export + register pipeline.** Same as intermediate Step 3a-4: write `scripts/onnx_export.py` from the snippet in `shared/references/onnx-in-db-embeddings.md`, copy `shared/snippets/onnx_loader.py` to `scripts/onnx_load.py`, run both, smoke `VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test')`.
+4. **Register the in-DB ONNX model via `onnx2oracle` CLI.** Same as intermediate Step 3a-4: `pip install onnx2oracle`, then `onnx2oracle load sentence-transformers/all-MiniLM-L6-v2 --name MY_MINILM_V1 --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" --force`. Smoke with `SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual`. Required GRANTs (`CREATE MINING MODEL`, `EXECUTE ON SYS.DBMS_VECTOR`) are issued by `oracle-aidb-docker-setup` Step 6.
 5. **Invoke `skills/langchain-oracledb-helper`.** Pass `embedder=in-db-onnx`, the per-idea collections, `has_chat_history=True`. Block until OK.
 6. **Invoke `skills/oracle-mcp-server-helper`.** Pass the per-idea `sql_mode` and `allowed_tools`. For idea 3, the helper will refuse to proceed silently — capture the explicit user `y` before invoking.
 
@@ -87,20 +87,30 @@ Write only the files specific to the chosen idea. Order: migrations → memory a
 8. `src/<package_slug>/memory/toolbox.py` — `register_tool`, `mark_success`, `mark_fail`, `recommend_next` (SQL queries).
 9. `src/<package_slug>/memory/log.py` — `append(tool, args, result, score)` writes to `TOOL_RUNS` (`OracleVS`) with embedding via `VECTOR_EMBEDDING`. `retrieve_similar(query)` uses `vector_search`.
 10. `src/<package_slug>/memory/summary.py` — `write_summary(session_id, text)` writes to `SESSION_SUMMARIES`. `retrieve_summaries(query)` for cold-start retrieval at session boot.
-11. `src/<package_slug>/tools/web_fetch.py` — small tool that does `httpx.get` + `trafilatura.extract`. Logged via `memory.log.append`.
-12. `src/<package_slug>/agent.py` — planner-executor loop:
+11. `src/<package_slug>/tools/web_fetch.py` — copy `shared/snippets/web_fetch_tool.py` verbatim. It's a `httpx.get` + `trafilatura.extract` BaseTool with a `(url, fallback_query)` signature so the agent can pivot to a corpus search when a URL 4xx/5xx or times out. The `corpus_search_fn` constructor arg is wired to `memory.log.retrieve_similar` (or any retriever you prefer) at scaffold time. Tool calls get logged via `memory.log.append`.
+12. `src/<package_slug>/agent.py` — planner-executor loop. The skeleton:
     ```python
     summaries = memory.summary.retrieve(task)  # cold-start
     state = {"task": task, "history": summaries, "step": 0}
-    while not done(state):
+    while state["step"] < MAX_STEPS:
         relevant_runs = memory.log.retrieve_similar(state["task"])
         plan = grok.plan(state, relevant_runs)
+        if plan.tool == "finish":
+            break
         result = execute_tool(plan.tool, plan.args)
         memory.log.append(plan.tool, plan.args, result, score(result))
         memory.toolbox.mark_success_or_fail(plan.tool, ...)
         state = update(state, result)
     memory.summary.write_summary(session_id, summarize(state))
     ```
+
+    **Planner system-prompt rules (load-bearing — friction P1-9):**
+    - Tool args MUST be a JSON object, never a list. Grok 4 will emit lists by default; correct this in the system prompt.
+    - In `read_only` SQL mode, refuse `run_sql` calls whose statement starts with anything other than `SELECT` or `WITH ... SELECT` — the `RunSQLTool` already enforces this; the planner should also know.
+    - Memory writes are AUTOMATIC at `finish`. The agent must not emit explicit `save_to_memory(...)` tool calls — the loop persists `summaries` and `tool_runs` for it.
+    - `finish` substantively after **2-3 useful tool calls**. Don't wander; `MAX_STEPS=12` is a safety net, not a target.
+
+    Without these prompt rules the agent burns through `MAX_STEPS` and persists placeholder content into memory — observed in run #4.
 13. `src/<package_slug>/adapter.py` — FastAPI `/v1/chat/completions` with streaming, exposes "task plan" + "tool calls" + "summary" as separate event types in the SSE stream so Open WebUI can render the agent's reasoning.
 
 #### Idea 3 — Conversational schema designer
@@ -139,6 +149,20 @@ Write only the files specific to the chosen idea. Order: migrations → memory a
 5. Run the notebook clean.
 6. Boot adapter, hit `/v1/models`, kill it.
 7. On any failure, follow `shared/verify.md` recovery loop, max 3 retries.
+
+### Resetting memory between dev runs (idea 2 specifically)
+
+Running the agent twice in dev pollutes memory tables — by design. To reset between iterations:
+
+```sql
+TRUNCATE TABLE TOOL_RUNS;
+TRUNCATE TABLE SESSION_SUMMARIES;
+TRUNCATE TABLE FINDINGS;
+DELETE FROM TOOL_REGISTRY;  -- not TRUNCATE — IDENTITY column counter resets weird
+COMMIT;
+```
+
+Add a `scripts/reset_memory.py` that runs the above. The notebook's last cell can call it for a clean re-run.
 
 ## Step 5 — Polish for sharing
 

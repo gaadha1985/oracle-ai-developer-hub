@@ -1,31 +1,32 @@
 # Oracle 26ai Free — drop-in for any choose-your-path project.
-# Tested with the official Oracle Container Registry image.
 #
-# Usage:
-#   1. Copy this file to your project root as `docker-compose.yml`.
-#   2. Copy `.env.example` to `.env` and confirm ORACLE_PWD meets the rules
-#      (>=12 chars, >=1 upper, >=1 lower, >=1 digit). The skill generates one
-#      automatically — don't pick a weak one.
-#   3. `docker compose up -d`
-#   4. First boot takes ~120 seconds. The healthcheck blocks `depends_on`
-#      until the DB is actually accepting connections — wait for it.
+# Port + volume + project-name are parameterised via .env so multiple parallel
+# choose-your-path runs can coexist on the same host (no collision on 1521).
+# The oracle-aidb-docker-setup skill writes those .env values for you.
 #
-# DSN for the Python side: localhost:1521/FREEPDB1
-# EM Express UI:           https://localhost:5500/em (user=SYSTEM, pass=ORACLE_PWD)
+# Required .env keys (skill writes these automatically):
+#   ORACLE_PWD            12+ char password, mixed case, digits, no $/@/"
+#   ORACLE_PORT           host port for the Oracle listener (default 1521)
+#   ORACLE_VOLUME         docker named volume (default oracle-data)
+#   COMPOSE_PROJECT_NAME  isolates this stack from other compose stacks
+#
+# DSN for the Python side: localhost:${ORACLE_PORT}/FREEPDB1
+# EM Express UI:           https://localhost:${ORACLE_EM_PORT}/em
+#                          (user=SYSTEM, pass=ORACLE_PWD)
 
 services:
   oracle:
     image: container-registry.oracle.com/database/free:latest
-    container_name: oracle-26ai-free
+    container_name: oracle-26ai-free-${COMPOSE_PROJECT_NAME:-default}
     restart: unless-stopped
     ports:
-      - "1521:1521"   # listener (your Python app talks to this)
-      - "5500:5500"   # EM Express (browser UI for poking around)
+      - "127.0.0.1:${ORACLE_PORT:-1521}:1521"   # listener
+      - "127.0.0.1:${ORACLE_EM_PORT:-5500}:5500" # EM Express
     environment:
       ORACLE_PWD: ${ORACLE_PWD}
       ORACLE_CHARACTERSET: AL32UTF8
     volumes:
-      - oracle-data:/opt/oracle/oradata
+      - ${ORACLE_VOLUME:-oracle-data}:/opt/oracle/oradata
       # Drop SQL files in ./init-schema/ — Oracle runs them once on first boot,
       # against FREEPDB1, alphabetically. Used by some skills for seed data.
       - ./init-schema:/opt/oracle/scripts/startup:ro
@@ -40,3 +41,5 @@ services:
 
 volumes:
   oracle-data:
+  # If ORACLE_VOLUME is set in .env to something other than `oracle-data`,
+  # docker compose creates the matching named volume on first up.

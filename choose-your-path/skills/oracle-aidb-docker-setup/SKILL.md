@@ -1,23 +1,35 @@
 ---
 name: oracle-aidb-docker-setup
-description: Bring up Oracle 26ai Free in Docker. Generates docker-compose.yml + .env, waits for healthy, smoke-tests connect. Idempotent — safe to re-invoke. Use when any project needs a fresh local Oracle 26ai instance.
+description: Bring up Oracle 26ai Free in Docker, create a project-scoped app user with USERS tablespace + ONNX-friendly grants, and write a `.env` ready for the rest of the choose-your-path skills. Idempotent — safe to re-invoke. Use when any project needs a fresh local Oracle 26ai instance.
 inputs:
   - target_dir: where to write docker-compose.yml + .env (default = current dir)
-  - port: host port to expose on (default = 1521)
+  - app_user: app user name for the project (default = derived from package_slug, uppercased; e.g. PDF_CHAT)
+  - port: host port for the Oracle listener (default = 1521); use a different port for parallel runs
+  - em_port: host port for EM Express (default = 5500)
+  - compose_project: docker compose project name (default = derived from target_dir basename)
   - oracle_pwd: optional; if not set, generate a strong one
-  - volume_name: docker named volume for persistence (default = oracle_<project_slug>_data)
+  - volume_name: docker named volume for persistence (default = oracle_<compose_project>_data)
 outputs:
-  - target_dir/docker-compose.yml
-  - target_dir/.env  (contains ORACLE_PWD, DB_DSN)
-  - a healthy `oracle` container reachable on host:port
+  - target_dir/docker-compose.yml      (parameterised — port + volume from .env)
+  - target_dir/.env                    (DB_USER, DB_PASSWORD, DB_DSN — APP user, NOT SYSTEM)
+  - a healthy `oracle` container reachable on host:${ORACLE_PORT}
+  - an APP user (default tablespace USERS) ready for OracleVS + chat history + ONNX
 ---
 
-You scaffold the Oracle 26ai Free container. Nothing else. No Python, no app code.
+You scaffold the Oracle 26ai Free container AND create the app user the rest of the choose-your-path skills will use. Nothing else. No Python app code beyond the user-creation script.
+
+**Why an app user (not SYSTEM)?** `OracleVS` declares its metadata column as JSON. Oracle's JSON validation requires Automatic Segment Space Management (ASSM). The `SYSTEM` tablespace lacks ASSM, so connecting as `SYSTEM` and creating any OracleVS table fails with `ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "SYSTEM"`. The app user we create has `DEFAULT TABLESPACE USERS` (which has ASSM).
 
 ## Step 0 — References
 
-- `shared/references/oracle-26ai-free-docker.md` — image, healthcheck, password rules.
-- `shared/templates/docker-compose.oracle-free.yml` — the canonical compose file. Copy it; don't reinvent.
+- `shared/references/oracle-26ai-free-docker.md` — image, healthcheck, password rules, app-user creation rationale.
+- `shared/templates/docker-compose.oracle-free.yml` — the canonical compose file (parameterised — port + volume + project name come from .env).
+
+## Pre-flight — host-shell gotchas (for the user)
+
+- After installing Docker, you must open a fresh shell for `docker` group membership to take effect — or use `sudo docker ...` for the rest of this session.
+- `conda activate <env>` does not work in non-interactive bash. Call binaries by absolute path (`~/miniconda3/envs/<env>/bin/python`).
+- conda-forge `python=3.12` does not include `pip` — when creating an env, list `pip` explicitly: `conda create -n <env> -c conda-forge --override-channels python=3.12 pip -y`.
 
 ## Step 1 — Detect existing setup
 
@@ -42,17 +54,26 @@ Why no symbols: Oracle's `ORACLE_PWD` env var splits on `$`, breaks on `@` (inte
 
 ## Step 3 — Write compose + env
 
-`target_dir/docker-compose.yml` — copied verbatim from `shared/templates/docker-compose.oracle-free.yml`, with `${ORACLE_PORT}`, `${ORACLE_PWD}`, and `${ORACLE_VOLUME}` placeholders left in (compose reads them from `.env`).
+`target_dir/docker-compose.yml` — copied verbatim from `shared/templates/docker-compose.oracle-free.yml`. The template uses `${ORACLE_PORT}`, `${ORACLE_PWD}`, `${ORACLE_VOLUME}`, and `${COMPOSE_PROJECT_NAME}` — compose reads them from `.env`.
 
 `target_dir/.env`:
 
 ```
+COMPOSE_PROJECT_NAME=<compose_project>
 ORACLE_PWD=<generated>
 ORACLE_PORT=<port>
+ORACLE_EM_PORT=<em_port>
 ORACLE_VOLUME=<volume_name>
+
+# SYS / SYSTEM creds — only used for the app-user creation in Step 6 and for
+# any SYSDBA-only operations (e.g. GRANT EXECUTE ON SYS.DBMS_VECTOR).
+SYS_USER=SYSTEM
+SYS_PASSWORD=<same as ORACLE_PWD>
+
+# Application credentials — what every other skill uses.
+DB_USER=<app_user>
+DB_PASSWORD=<generated app pwd>
 DB_DSN=localhost:<port>/FREEPDB1
-DB_USER=SYSTEM
-DB_PASSWORD=<same as ORACLE_PWD>
 ```
 
 Don't commit `.env`. The skill confirms `target_dir/.gitignore` contains `.env` — adds the line if missing.
@@ -71,7 +92,7 @@ If `--wait` exits non-zero:
 2. Common causes: port collision (someone else has 1521 — ask the user to pick a different port and re-run), insufficient memory (Oracle needs ~2GB; tell the user), corrupt volume (rare, suggest `docker compose down -v` AFTER confirming with the user).
 3. Stop. Don't retry blindly.
 
-## Step 5 — Smoke connect
+## Step 5 — Smoke SYSTEM connect
 
 ```python
 import oracledb, os
@@ -79,19 +100,75 @@ from dotenv import load_dotenv
 
 load_dotenv(f"{target_dir}/.env")
 conn = oracledb.connect(
-    user=os.environ["DB_USER"],
-    password=os.environ["DB_PASSWORD"],
+    user=os.environ["SYS_USER"],
+    password=os.environ["SYS_PASSWORD"],
     dsn=os.environ["DB_DSN"],
 )
 with conn.cursor() as cur:
     cur.execute("SELECT 'ok' FROM dual")
     assert cur.fetchone()[0] == "ok"
-print("oracle-aidb-docker-setup: OK")
+print("oracle-aidb-docker-setup: SYSTEM connect OK")
 ```
 
 If this fails with `ORA-12541` (no listener), wait another 30s and retry once — the container claims healthy a few seconds before the listener is ready in some kernels. If it still fails, stop and surface the error.
 
 If `oracledb` isn't installed in the current env, install it: `pip install oracledb`.
+
+## Step 6 — Create the app user (load-bearing for every other skill)
+
+Connect as `SYSTEM` and create an app user named after `app_user` with `DEFAULT TABLESPACE USERS` plus the grants needed by the rest of the choose-your-path skill set:
+
+```python
+APP_USER = os.environ["DB_USER"]            # e.g. PDF_CHAT
+APP_PWD  = os.environ["DB_PASSWORD"]
+SYS_PWD  = os.environ["SYS_PASSWORD"]
+
+with conn.cursor() as cur:
+    # Drop if exists, then create. Idempotent.
+    try:
+        cur.execute(f"DROP USER {APP_USER} CASCADE")
+    except oracledb.DatabaseError as e:
+        if "ORA-01918" not in str(e):  # user does not exist
+            raise
+
+    cur.execute(
+        f'CREATE USER {APP_USER} IDENTIFIED BY "{APP_PWD}" '
+        f'DEFAULT TABLESPACE USERS QUOTA UNLIMITED ON USERS'
+    )
+    cur.execute(
+        f"GRANT CONNECT, RESOURCE, CREATE SESSION, CREATE TABLE, "
+        f"CREATE VIEW, CREATE PROCEDURE TO {APP_USER}"
+    )
+    cur.execute(f"GRANT CREATE MINING MODEL TO {APP_USER}")
+    # Required for VECTOR_EMBEDDING(MODEL ...) — the in-DB ONNX path used by
+    # intermediate / advanced. Granting EXECUTE ON SYS.DBMS_VECTOR works
+    # from SYSTEM in 26ai Free; if your build requires SYSDBA, connect as
+    # SYS AS SYSDBA for this single GRANT.
+    try:
+        cur.execute(f"GRANT EXECUTE ON SYS.DBMS_VECTOR TO {APP_USER}")
+    except oracledb.DatabaseError as e:
+        if "ORA-01031" in str(e):  # insufficient privileges
+            raise RuntimeError(
+                "GRANT EXECUTE ON SYS.DBMS_VECTOR requires SYSDBA. "
+                "Connect as `sys/${SYS_PASSWORD}@${DB_DSN} AS SYSDBA` and "
+                "run the GRANT manually, then re-invoke this skill."
+            )
+        raise
+conn.commit()
+print(f"oracle-aidb-docker-setup: created app user {APP_USER}")
+```
+
+Now smoke the app-user connection (this is the one every other skill uses):
+
+```python
+app_conn = oracledb.connect(
+    user=APP_USER, password=APP_PWD, dsn=os.environ["DB_DSN"]
+)
+with app_conn.cursor() as cur:
+    cur.execute("SELECT 'ok' FROM dual")
+    assert cur.fetchone()[0] == "ok"
+print("oracle-aidb-docker-setup: app user connect OK")
+```
 
 ## Stop conditions
 

@@ -2,7 +2,39 @@
 
 For advanced users who want **no external embedding API** — embeddings happen inside the Oracle Database itself, on insert and on query, via a registered ONNX model. No Python embedder process to keep alive, no network round-trips per query, no data leaving the DB.
 
-The pattern is from `~/git/personal/onnx2oracle/` — that's the canonical exemplar.
+## Recommended path: `onnx2oracle` (canonical exemplar, now a PyPI CLI)
+
+The canonical reference [`github.com/jasperan/onnx2oracle`](https://github.com/jasperan/onnx2oracle) ships as a `pip`-installable command-line tool that does export-and-register in one shot. **Use it instead of the manual three-step pipeline below** unless you have a reason not to.
+
+```bash
+pip install onnx2oracle
+onnx2oracle load sentence-transformers/all-MiniLM-L6-v2 \
+    --name MY_MINILM_V1 \
+    --dsn "$DB_USER/$DB_PASSWORD@$DB_DSN" \
+    --force
+```
+
+The `--dsn` flag takes a single connection string in the form `user/password@host:port/service`. There are NO separate `--user` / `--password` flags. `--force` re-registers if a model of the same name already exists.
+
+After registration, smoke with:
+
+```sql
+SELECT VECTOR_EMBEDDING(MY_MINILM_V1 USING 'test' AS data) FROM dual;
+-- Returns a 384-dim vector for MiniLM-L6-v2.
+```
+
+### Required GRANTs
+
+The user running `onnx2oracle load ...` must have:
+
+- `CREATE MINING MODEL` (granted to the app user during `oracle-aidb-docker-setup` Step 6).
+- `EXECUTE ON SYS.DBMS_VECTOR` (also granted in Step 6; if your build refuses, connect as `SYS AS SYSDBA` and run the GRANT manually — `26ai Free` typically allows it from `SYSTEM`).
+
+If `onnx2oracle` exits with `ORA-29516` or `ORA-01031`, the GRANT chain is incomplete — check `oracle-aidb-docker-setup`'s Step 6 ran fully.
+
+## Manual three-step pipeline (appendix)
+
+Keep this for users who can't add `onnx2oracle` as a dependency. The CLI does these three things internally; if you must do them by hand, here they are.
 
 ## When to use
 

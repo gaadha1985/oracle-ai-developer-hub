@@ -30,15 +30,17 @@ You wire MCP. You do not write the agent loop, the chain, or the UI — those ar
 
 ## Step 2 — Add deps
 
+> **Friction P0-1:** the previous version of this skill named `oracle-database-mcp-server` as a pip dependency. That package does NOT exist on PyPI. Until a canonical Oracle MCP server is published, this skill scaffolds a **local in-process tool layer** that exposes the same surface (`list_tables`, `describe_table`, `run_sql`, `vector_search`) as `langchain_core.tools.BaseTool` subclasses calling `oracledb.Cursor` directly. The agent gets the same typed contract — there's just no out-of-process MCP server.
+
 In `target_dir/pyproject.toml` under `[project] dependencies`:
 
 ```
-"oracle-database-mcp-server>=0.1",
-"langchain-mcp-adapters>=0.1",
-"mcp>=0.9",
+"oracledb>=2.5",
+"langchain-core>=0.3",
+"langchain-community>=0.3",
 ```
 
-Run `pip install -e .` from `target_dir`. If the user's environment is conda, prefer `python -m pip install -e .` over `pip` directly (per CLAUDE.md note).
+Run `pip install -e .` from `target_dir`. If the user's environment is conda, prefer absolute paths (`~/miniconda3/envs/<env>/bin/pip install -e .`) — `conda activate` does not work in non-interactive bash.
 
 ## Step 3 — Add env keys
 
@@ -50,99 +52,145 @@ ORACLE_MCP_SQL_MODE=<read_only|read_write>
 ORACLE_MCP_ALLOWED_TOOLS=<comma-separated allowed_tools>
 ```
 
-## Step 4 — Write `mcp_client.py`
+## Step 4 — Write `mcp_client.py` (local-tool scaffold)
+
+Implement four LangChain `BaseTool` subclasses calling `oracledb` directly. Use **subclasses** (not monkeypatched instances — Pydantic 2 forbids that, friction P1-8).
 
 ```python
 """
-Oracle MCP client wrapper.
+Oracle local-tool scaffold (substitute for an out-of-process MCP server until
+oracle-database-mcp-server is published on PyPI; see friction P0-1).
 
-Spawns oracle-database-mcp-server over stdio, attaches a single client session
-to it, and converts the server's tools into LangChain BaseTool instances via
-langchain-mcp-adapters.
-
-Lifecycle: the session is module-scoped and lazy. First call spawns; subsequent
-calls reuse. The session shuts down on process exit (atexit).
+Each tool is a LangChain BaseTool subclass calling oracledb.Cursor directly.
+Same surface as the eventual MCP server — list_tables, describe_table,
+run_sql, vector_search — so swapping in a real MCP server later is mechanical.
 
 Cites:
-- shared/references/sources.md → oracle-database-mcp-server
+- shared/references/sources.md
+- shared/references/langchain-oracledb.md
 """
-import asyncio
-import atexit
 import os
-from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, List
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from langchain_mcp_adapters.tools import load_mcp_tools
+import oracledb
+from langchain_core.tools import BaseTool
+from pydantic import Field
 
-
-_session: Optional[ClientSession] = None
-_session_cm = None  # keep the context manager alive
-_loop: Optional[asyncio.AbstractEventLoop] = None
+from .store import get_connection, get_store  # from langchain-oracledb-helper
 
 
-def _server_params() -> StdioServerParameters:
-    return StdioServerParameters(
-        command="oracle-database-mcp-server",
-        args=[
-            "--dsn", os.environ["DB_DSN"],
-            "--user", os.environ["DB_USER"],
-            "--mode", os.environ.get("ORACLE_MCP_SQL_MODE", "read_only"),
-        ],
-        env={"DB_PASSWORD": os.environ["DB_PASSWORD"]},
+def _readonly_mode() -> bool:
+    return os.environ.get("ORACLE_MCP_SQL_MODE", "read_only") == "read_only"
+
+
+class ListTablesTool(BaseTool):
+    name: str = "list_tables"
+    description: str = (
+        "List user-owned tables in the connected Oracle schema. "
+        "No arguments. Returns a JSON list of table names."
     )
 
-
-async def _ensure_session() -> ClientSession:
-    global _session, _session_cm
-    if _session is not None:
-        return _session
-    _session_cm = stdio_client(_server_params())
-    read, write = await _session_cm.__aenter__()
-    session = ClientSession(read, write)
-    await session.__aenter__()
-    await session.initialize()
-    _session = session
-    return _session
+    def _run(self) -> str:  # type: ignore[override]
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT table_name FROM USER_TABLES ORDER BY table_name"
+            )
+            rows = [r[0] for r in cur.fetchall()]
+        return repr(rows)
 
 
-def _shutdown():
-    if _session_cm is not None:
-        try:
-            asyncio.get_event_loop().run_until_complete(_session_cm.__aexit__(None, None, None))
-        except Exception:
-            pass
+class DescribeTableTool(BaseTool):
+    name: str = "describe_table"
+    description: str = (
+        "Describe one table's columns. Args: table_name (str). "
+        "Returns a JSON list of {column_name, data_type, nullable}."
+    )
+
+    def _run(self, table_name: str) -> str:  # type: ignore[override]
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT column_name, data_type, nullable "
+                "FROM USER_TAB_COLUMNS WHERE table_name = :t "
+                "ORDER BY column_id",
+                t=table_name.upper(),
+            )
+            cols = [
+                {"column_name": c[0], "data_type": c[1], "nullable": c[2]}
+                for c in cur.fetchall()
+            ]
+        return repr(cols)
 
 
-atexit.register(_shutdown)
+class RunSQLTool(BaseTool):
+    name: str = "run_sql"
+    description: str = (
+        "Execute a SQL statement and return rows as a JSON list. "
+        "Args: sql (str). In read_only mode (default) only SELECT and "
+        "WITH ... SELECT statements are allowed; mutating SQL is rejected."
+    )
+
+    def _run(self, sql: str) -> str:  # type: ignore[override]
+        if _readonly_mode():
+            stripped = sql.lstrip().lower()
+            if not (stripped.startswith("select") or stripped.startswith("with")):
+                return (
+                    "[run_sql refused — read_only mode rejects mutating SQL. "
+                    "Set ORACLE_MCP_SQL_MODE=read_write to enable.]"
+                )
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            rows = cur.fetchall() if cols else []
+        return repr({"columns": cols, "rows": [list(r) for r in rows]})
 
 
-def get_loop() -> asyncio.AbstractEventLoop:
-    global _loop
-    if _loop is None:
-        _loop = asyncio.new_event_loop()
-    return _loop
+class VectorSearchTool(BaseTool):
+    name: str = "vector_search"
+    description: str = (
+        "Similarity search over a registered OracleVS collection. "
+        "Args: collection (str — one of the project's configured collections), "
+        "query (str), k (int, default 5). Returns the top-k chunks with metadata."
+    )
+
+    def _run(  # type: ignore[override]
+        self, collection: str, query: str, k: int = 5
+    ) -> str:
+        store = get_store(collection)
+        hits = store.similarity_search(query, k=k)
+        return repr(
+            [
+                {"page_content": h.page_content, "metadata": h.metadata}
+                for h in hits
+            ]
+        )
 
 
-async def _list_tools_async():
-    session = await _ensure_session()
-    tools = await load_mcp_tools(session)
-    allowed = set(os.environ.get("ORACLE_MCP_ALLOWED_TOOLS", "").split(","))
-    if allowed:
-        tools = [t for t in tools if t.name in allowed or f"oracle_{t.name}" in allowed]
-    return tools
-
-
-def list_tools():
-    """Synchronous wrapper — returns list[BaseTool] usable by LangChain agents."""
-    loop = get_loop()
-    return loop.run_until_complete(_list_tools_async())
+def list_tools() -> List[BaseTool]:
+    """Return the per-project subset of allowed tools."""
+    allowed = set(
+        s.strip()
+        for s in os.environ.get(
+            "ORACLE_MCP_ALLOWED_TOOLS",
+            "list_tables,describe_table,run_sql,vector_search",
+        ).split(",")
+        if s.strip()
+    )
+    catalog = {
+        "list_tables": ListTablesTool(),
+        "describe_table": DescribeTableTool(),
+        "run_sql": RunSQLTool(),
+        "vector_search": VectorSearchTool(),
+    }
+    return [catalog[name] for name in catalog if name in allowed]
 ```
 
 Notes for the tier skill that uses this:
-- Tools come back already shaped as `langchain_core.tools.BaseTool`. Bind them to the LLM via `llm.bind_tools(list_tools())` — no manual `@tool` decoration needed.
-- The async-from-sync bridge is the simplest possible. If the tier skill builds an async agent, expose `_list_tools_async` directly instead.
+- Tools come back as `langchain_core.tools.BaseTool` subclasses. Bind them to the LLM via `llm.bind_tools(list_tools())` — no manual `@tool` decoration needed.
+- Wrap `RunSQLTool` with `shared/snippets/sqlcl_tee.py` if you want a SQLcl-tee log per query (intermediate tier folds this in by default).
+- When a real `oracle-database-mcp-server` appears on PyPI, swap `list_tools()`'s body for an MCP-stdio session; the tool surface is unchanged so callers don't break.
 
 ## Step 5 — Write `tool_registry.py`
 
