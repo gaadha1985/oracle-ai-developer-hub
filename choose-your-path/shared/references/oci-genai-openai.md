@@ -83,7 +83,7 @@ If unsure, use Pattern 1 — Signature V1 always works given a valid `~/.oci/con
 
 | Model | Regions | Notes |
 | --- | --- | --- |
-| `grok-4` | `us-chicago-1` only | Default for intermediate path. The skill warns + offers fallback if the user's tenancy isn't in chicago. |
+| `xai.grok-4` | `us-phoenix-1` (bearer-token, canonical) and `us-chicago-1` (SigV1, legacy) | Default model id for all three tiers — pass the full `xai.grok-4`, not `grok-4`. Bearer-token endpoint is `us-phoenix-1`; SigV1 endpoint is `us-chicago-1`. |
 | `cohere.command-r-plus` | most regions | Reliable fallback for chat. |
 | `meta.llama-3.3-70b-instruct` | most regions | Open-weight option hosted in OCI. |
 | `cohere.embed-english-v3.0` | most regions | 1024-dim. Default embedder for intermediate path. |
@@ -148,19 +148,19 @@ The intermediate skill wraps this in a LangChain `Embeddings` subclass so the re
 - Batches in chunks of 96 (Cohere's per-call limit).
 - Caches the client at module scope.
 
-## Chat via the OpenAI-compat endpoint, in LangChain
+## Chat via the OpenAI-compat endpoint, in LangChain (bearer-token, canonical)
 
 ```python
 from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
-    model="grok-4",
-    base_url="https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai",
-    api_key=os.environ["OCI_API_KEY"],   # see auth section
+    model="xai.grok-4",
+    base_url="https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com/v1",
+    api_key=os.environ["OCI_GENAI_API_KEY"],
     temperature=0.2,
 )
 ```
 
-Source: `~/git/personal/oci-genai-service/src/oci_genai_service/inference/chat.py:1-95`. Streaming works the same way as with native OpenAI — `stream=True` on the `OpenAI` client or `llm.stream(...)` in LangChain.
+Streaming works the same way as with native OpenAI — `stream=True` on the `OpenAI` client or `llm.stream(...)` in LangChain. The earlier SigV1 LangChain wiring (using `OCI_API_KEY` against `us-chicago-1` with `oci-openai`) lives in `archive/` — kept for reference but not actively scaffolded.
 
 ## Cost / quota gotchas the skill should mention once
 

@@ -76,7 +76,7 @@ These prerequisites apply to every tier. Don't re-ask them inside each path.
 
 - User wants something not on this list ("can I do this in TypeScript?", "I want a Postgres backend", "what about Mongo?"). Print: "v1 of choose-your-path is Python + Oracle only. See `PLAN.md` for the rationale and the v2 backlog." Stop.
 - User can't decide between two paths after 2 nudges. Default to **intermediate** and tell them so — it's the most representative shape.
-- User has no OCI tenancy. Stop. Point at `archive/` for Ollama-flavored older ideas, or at the OCI free trial signup.
+- User has no OCI Generative AI API key (`OCI_GENAI_API_KEY`, a `sk-...` value from the OCI GenAI service console). Stop. Point them at the OCI GenAI console to generate one (no full OCI tenancy needed), or at `archive/` for Ollama-flavored older ideas.
 
 ## What you must NOT do
 

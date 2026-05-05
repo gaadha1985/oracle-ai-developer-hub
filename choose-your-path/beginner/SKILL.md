@@ -51,7 +51,7 @@ Build a scaffold spec from the interview:
 | `embedding_dim` | 384 |
 | `embedding_model_id` | `sentence-transformers/all-MiniLM-L6-v2` |
 | `llm_model` | `grok-4` (or fallback chosen during interview) |
-| `oci_base_url` | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai` |
+| `oci_base_url` | `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com` (the OpenAI client appends `/v1`; do **not** add the legacy `/20231130/actions/openai` path — that is for SigV1, not bearer-token) |
 | `collections` | `["DOCUMENTS", "CONVERSATIONS"]` |
 | `has_chat_history` | `True` |
 | `ingest_module` | `ingest.py` for PDFs/markdown, `add.py` for web pages |

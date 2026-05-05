@@ -11,7 +11,7 @@ Three takes on the same skeleton: ingest a corpus → embed via OCI Cohere → s
 | DB | Oracle 26ai Free in Docker | Single command up; vector + relational + JSON in one place. |
 | Vector store | `langchain-oracledb` `OracleVS`, single collection | The library you came to learn. |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (384 dim) via `HuggingFaceEmbeddings` (Python-side) | Same model intermediate/advanced register inside Oracle. Local, free, ~90MB weights downloaded once. Lets a user migrate their corpus to tier 2/3 without re-tuning chunks. |
-| LLM | OCI GenAI — `grok-4` in `us-chicago-1` (OpenAI-compat endpoint, SigV1 auth) | Hosted, fast, no GPU on the laptop. Skill warns about region + cost during interview. |
+| LLM | OCI GenAI — `xai.grok-4` at `us-phoenix-1` (OpenAI-compat endpoint, bearer-token API key) | Hosted, fast, no GPU on the laptop. Auth is one `OCI_GENAI_API_KEY=sk-...` value — no full OCI tenancy needed. Skill warns about cost during the interview. |
 | Chat history | `OracleChatHistory` (custom subclass, since `langchain-oracledb` doesn't ship one) backed by `chat_history` table | Survives kill/restart. |
 | UI | **Open WebUI**, pointed at the project's OpenAI-compatible adapter | Polished out of the box, multi-conversation, drop-in for ChatGPT-style interaction. |
 | Adapter | A tiny FastAPI app exposing `/v1/chat/completions` over the LangChain chain | Open WebUI talks OpenAI; this is the thinnest glue. |

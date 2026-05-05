@@ -33,7 +33,7 @@ The skill verifies the dim consistency (384) at `verify.py` time and refuses to 
 | DB | Oracle 26ai Free in Docker (via `skills/oracle-aidb-docker-setup`) |
 | Vector store | `OracleVS` with `InDBEmbeddings` (subclass that calls `VECTOR_EMBEDDING(...)` via SQL) |
 | Embeddings | `MY_MINILM_V1` (registered ONNX model, 384 dim) |
-| LLM | OCI GenAI `grok-4` in `us-chicago-1`, SigV1 auth |
+| LLM | OCI GenAI `xai.grok-4` at `us-phoenix-1`, OpenAI-compat bearer-token API key (`OCI_GENAI_API_KEY=sk-...`) |
 | Tools | `oracle-database-mcp-server` over stdio, exposing `list_tables`, `describe_table`, `run_sql`, `vector_search` (read-only by default) |
 | Agent | LangChain tool-calling agent (`llm.bind_tools(get_tools())` + `RunnableWithMessageHistory`) |
 | UI | Open WebUI on `:3000`, talks to a FastAPI adapter on `:8000` |

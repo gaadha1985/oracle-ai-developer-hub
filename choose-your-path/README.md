@@ -1,6 +1,6 @@
 # choose-your-path
 
-A skill set that interrogates you, picks an Oracle-AI-DB project at your level, and scaffolds a real, runnable application powered by **OCI Generative AI Grok 4** + **`langchain-oracledb`** + **Oracle 26ai Free in Docker**. Three paths, three projects per path. Pick by complexity, not access — any of them are open to anyone with an OCI tenancy.
+A skill set that interrogates you, picks an Oracle-AI-DB project at your level, and scaffolds a real, runnable application powered by **OCI Generative AI Grok 4** + **`langchain-oracledb`** + **Oracle 26ai Free in Docker**. Three paths, three projects per path. Pick by complexity, not access — any of them are open to anyone with a single OCI Generative AI API key (`sk-...`).
 
 | Path | What you build | Stack | Time |
 | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ The skills are **agent-agnostic markdown** — they don't depend on a specific h
 
 - **Docker.** The skills bring up the official Oracle 26ai Free image; no Oracle install on your host.
 - **Python 3.11+.**
-- **An OCI tenancy** with `~/.oci/config` and an `OCI_COMPARTMENT_ID`. *All three tiers* now require this — Grok 4 lives at `inference.generativeai.us-chicago-1.oci.oraclecloud.com`. The earlier Ollama-fallback variants are preserved in [`archive/`](./archive/) but no longer actively scaffolded.
+- **An OCI Generative AI API key** (`OCI_GENAI_API_KEY`, a `sk-...` value generated in the OCI GenAI service console). *All three tiers* require this. The bearer-token endpoint is `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com` — no `~/.oci/config`, no compartment OCID, no SigV1 ceremony. The earlier Ollama-fallback variants are preserved in [`archive/`](./archive/) but no longer actively scaffolded.
 
 ## What gets scaffolded
 

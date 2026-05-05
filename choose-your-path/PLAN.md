@@ -197,7 +197,7 @@ The skill teaches that pattern first, then layers on `add_texts()` (insert more 
 ---
 
 ### Intermediate
-**Persona.** Built RAG before, probably with FAISS/Chroma. Wants to redo it on Oracle AI DB and use OCI GenAI for inference. Has or can create an OCI tenancy.
+**Persona.** Built RAG before, probably with FAISS/Chroma. Wants to redo it on Oracle AI DB and use OCI GenAI for inference. Has an OCI GenAI API key (`sk-...`) — no full OCI tenancy needed.
 
 **Stack.** Python + `langchain-oracledb` (the *centerpiece* — `OracleVS`, `OracleVS.as_retriever()`, `OracleSummaryStore` for chat history, multi-collection patterns) + OCI Generative AI (OpenAI-compatible endpoint, default model = Grok 4) + Gradio UI. Falls back to Ollama if user lacks OCI.
 

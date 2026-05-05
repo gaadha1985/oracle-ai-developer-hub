@@ -2,7 +2,7 @@
 
 Pick a path, point Claude Code (or any agent that follows SKILL.md) at the right `SKILL.md`, answer six questions, get a runnable project. This doc walks one beginner, one intermediate, and one advanced build end-to-end so you don't have to remember anything tomorrow.
 
-The post-restructure skill set is **OCI-Generative-AI-only** for the LLM (Grok 4 in `us-chicago-1`). Older Ollama-flavored ideas live in [`archive/`](./archive/) but aren't actively scaffolded. If you don't have an OCI tenancy, you'll want to either spin one up or work from the archive.
+The post-restructure skill set is **OCI-Generative-AI-only** for the LLM (Grok 4 at `us-phoenix-1`, OpenAI-compat bearer-token endpoint — auth is just a `sk-...` API key, no full OCI tenancy required). Older Ollama-flavored ideas live in [`archive/`](./archive/) but aren't actively scaffolded.
 
 ---
 
