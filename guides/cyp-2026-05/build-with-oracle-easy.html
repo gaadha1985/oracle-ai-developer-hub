@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Build with Oracle, Easy — choose-your-path AI session</title>
+  <!-- 17 slides. Use-case slides for each tier sit immediately after each tier
+       intro: beginner @ slide 6, intermediate @ slide 9, advanced @ slide 12. -->
+
+
+  <!-- ── Fonts: Archivo Black for display + Space Grotesk for body + JetBrains Mono for code ── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Space+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet" />
+
+  <style>
+    /* ===========================================================
+       THEME — BOLD SIGNAL (orange card on dark gradient)
+       Adjust these :root variables to retune the entire deck.
+       =========================================================== */
+    :root {
+      --bg-primary: #1a1a1a;
+      --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+      --card-bg: #FF5722;          /* signature orange — Oracle's "warm" red shifted toward energy */
+      --card-bg-alt: #C13D17;      /* deeper orange for hover/secondary cards */
+      --accent: #FFB627;           /* warning-yellow accent for code highlights */
+      --accent-cool: #4DB8E5;      /* cool secondary for "Oracle blue" call-outs */
+      --text-primary: #ffffff;
+      --text-on-card: #1a1a1a;
+      --text-muted: rgba(255,255,255,0.55);
+      --rule-color: rgba(255,255,255,0.12);
+
+      --font-display: "Archivo Black", "Helvetica Neue", sans-serif;
+      --font-body: "Space Grotesk", "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", monospace;
+
+      --title-size: clamp(1.75rem, 5.5vw, 4.5rem);
+      --h2-size:    clamp(1.4rem, 3.6vw, 2.75rem);
+      --h3-size:    clamp(1.05rem, 2.4vw, 1.6rem);
+      --body-size:  clamp(0.85rem, 1.4vw, 1.1rem);
+      --small-size: clamp(0.7rem, 1vw, 0.9rem);
+      --code-size:  clamp(0.7rem, 1.05vw, 0.95rem);
+
+      --slide-padding: clamp(1.25rem, 4vw, 4rem);
+      --content-gap:   clamp(0.6rem, 2vw, 2rem);
+      --element-gap:   clamp(0.3rem, 1vw, 1rem);
+
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration-normal: 0.6s;
+      --duration-slow: 0.9s;
+    }
+
+    /* ===========================================================
+       VIEWPORT-BASE — paste of viewport-base.css (mandatory)
+       Locks slides to 100vh, no scroll inside slides, ever.
+       =========================================================== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); }
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex; flex-direction: column;
+      position: relative;
+      background: var(--bg-gradient);
+      padding: var(--slide-padding);
+    }
+    .slide-content { flex: 1; display: flex; flex-direction: column; justify-content: center; max-height: 100%; overflow: hidden; gap: var(--content-gap); }
+    .card, .container { max-width: min(90vw, 1100px); max-height: min(85vh, 720px); }
+    img, .image-container { max-width: 100%; max-height: min(50vh, 400px); object-fit: contain; }
+
+    @media (max-height: 700px) {
+      :root {
+        --slide-padding: clamp(0.75rem, 3vw, 2rem);
+        --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+        --title-size: clamp(1.4rem, 4.5vw, 3rem);
+        --h2-size: clamp(1.1rem, 3vw, 2rem);
+      }
+    }
+    @media (max-height: 600px) {
+      :root {
+        --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+        --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+        --title-size: clamp(1.2rem, 4vw, 2.25rem);
+        --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+      }
+      .nav-dots, .keyboard-hint, .decorative { display: none; }
+    }
+    @media (max-height: 500px) {
+      :root {
+        --slide-padding: clamp(0.4rem, 2vw, 1rem);
+        --title-size: clamp(1rem, 3.5vw, 1.5rem);
+        --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+        --body-size: clamp(0.65rem, 1vw, 0.85rem);
+      }
+    }
+    @media (max-width: 600px) {
+      :root { --title-size: clamp(1.25rem, 7vw, 2.5rem); }
+      .grid { grid-template-columns: 1fr !important; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ===========================================================
+       BOLD SIGNAL SIGNATURE — slide chrome
+       - Section number top-left
+       - Nav breadcrumbs top-right (active opacity)
+       - Title bottom-left with orange card focal point on title slides
+       =========================================================== */
+    .slide-num {
+      position: absolute;
+      top: clamp(1rem, 2.5vw, 2rem);
+      left: clamp(1rem, 2.5vw, 2rem);
+      font-family: var(--font-display);
+      font-size: clamp(0.85rem, 1.4vw, 1.2rem);
+      letter-spacing: 0.15em;
+      color: var(--text-muted);
+      z-index: 5;
+    }
+    .slide-breadcrumb {
+      position: absolute;
+      top: clamp(1rem, 2.5vw, 2rem);
+      right: clamp(1rem, 2.5vw, 2rem);
+      display: flex;
+      gap: clamp(0.5rem, 1vw, 1rem);
+      font-family: var(--font-body);
+      font-size: var(--small-size);
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      z-index: 5;
+    }
+    .slide-breadcrumb span { transition: opacity 0.2s; }
+    .slide-breadcrumb .active { color: var(--card-bg); opacity: 1; font-weight: 600; }
+    .slide-breadcrumb .inactive { opacity: 0.4; }
+
+    /* The orange card — title slide focal point */
+    .signal-card {
+      background: var(--card-bg);
+      color: var(--text-on-card);
+      padding: clamp(1.5rem, 4vw, 3.5rem);
+      border-radius: clamp(0.4rem, 0.8vw, 0.6rem);
+      max-width: min(80vw, 820px);
+      box-shadow: 0 clamp(0.5rem, 1.5vw, 1.5rem) clamp(1.5rem, 4vw, 3.5rem) rgba(255,87,34,0.18);
+    }
+    .signal-card h1 {
+      font-family: var(--font-display);
+      font-size: var(--title-size);
+      line-height: 0.95;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4em;
+    }
+    .signal-card .kicker {
+      font-family: var(--font-body);
+      font-size: var(--small-size);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      margin-bottom: 0.8em;
+      opacity: 0.75;
+    }
+    .signal-card .subhead {
+      font-family: var(--font-body);
+      font-size: clamp(0.95rem, 1.6vw, 1.25rem);
+      font-weight: 500;
+      line-height: 1.4;
+      max-width: 28em;
+    }
+
+    /* Content slide title block */
+    .section-title {
+      font-family: var(--font-display);
+      font-size: var(--h2-size);
+      line-height: 1;
+      letter-spacing: -0.01em;
+      max-width: 22em;
+    }
+    .section-title em {
+      font-style: normal;
+      color: var(--card-bg);
+    }
+    .section-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--small-size);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 700;
+      color: var(--card-bg);
+      margin-bottom: 0.5em;
+    }
+    .section-lede {
+      font-family: var(--font-body);
+      font-size: var(--body-size);
+      line-height: 1.55;
+      max-width: 38em;
+      color: rgba(255,255,255,0.88);
+    }
+    .section-lede strong { color: var(--card-bg); font-weight: 700; }
+    .section-lede code { font-family: var(--font-mono); font-size: 0.92em; background: rgba(255,255,255,0.08); padding: 0.05em 0.4em; border-radius: 0.2em; color: var(--accent); }
+
+    /* Bullet lists — Bold Signal uses minimal markers with orange accent */
+    .bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.5rem, 1vw, 0.9rem);
+      max-width: 38em;
+    }
+    .bullets li {
+      font-size: var(--body-size);
+      line-height: 1.45;
+      padding-left: 1.5em;
+      position: relative;
+      color: rgba(255,255,255,0.92);
+    }
+    .bullets li::before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: var(--card-bg);
+      font-weight: 700;
+    }
+    .bullets li strong { color: var(--card-bg); }
+    .bullets li code { font-family: var(--font-mono); font-size: 0.9em; background: rgba(255,255,255,0.08); padding: 0.05em 0.4em; border-radius: 0.2em; color: var(--accent); }
+
+    /* Two-column layouts */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(1rem, 3vw, 3rem);
+      align-items: start;
+      max-width: min(95vw, 1200px);
+    }
+    .col-stack { display: flex; flex-direction: column; gap: var(--content-gap); }
+
+    /* Code blocks — JetBrains Mono on darker card */
+    pre.code {
+      background: rgba(0,0,0,0.45);
+      border: 1px solid var(--rule-color);
+      border-left: 3px solid var(--card-bg);
+      padding: clamp(0.75rem, 1.5vw, 1.25rem) clamp(1rem, 2vw, 1.5rem);
+      font-family: var(--font-mono);
+      font-size: var(--code-size);
+      line-height: 1.5;
+      color: rgba(255,255,255,0.92);
+      border-radius: 0.3em;
+      overflow: hidden;
+      white-space: pre;
+      max-width: 100%;
+    }
+    pre.code .kw { color: var(--card-bg); font-weight: 600; }
+    pre.code .str { color: var(--accent); }
+    pre.code .com { color: var(--text-muted); font-style: italic; }
+    pre.code .fn { color: var(--accent-cool); }
+    pre.code .em { background: rgba(255,87,34,0.18); padding: 0 0.2em; border-radius: 0.15em; }
+
+    /* Step badges — for the "three tiers" arc and demo timeline */
+    .badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(0.75rem, 2vw, 1.5rem); max-width: min(95vw, 1200px); }
+    .badge {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--rule-color);
+      padding: clamp(1rem, 2.5vw, 1.75rem);
+      border-radius: clamp(0.3rem, 0.6vw, 0.5rem);
+      display: flex; flex-direction: column; gap: clamp(0.4rem, 1vw, 0.8rem);
+      transition: border-color 0.3s;
+    }
+    .badge:hover { border-color: var(--card-bg); }
+    .badge .badge-num {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 3vw, 2.5rem);
+      color: var(--card-bg);
+      line-height: 1;
+    }
+    .badge .badge-tier {
+      font-family: var(--font-body);
+      font-size: var(--small-size);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .badge .badge-title {
+      font-family: var(--font-display);
+      font-size: clamp(1rem, 1.8vw, 1.35rem);
+      line-height: 1.1;
+    }
+    .badge .badge-desc {
+      font-size: var(--small-size);
+      color: rgba(255,255,255,0.78);
+      line-height: 1.4;
+    }
+    .badge .badge-meta {
+      font-family: var(--font-mono);
+      font-size: clamp(0.65rem, 0.9vw, 0.8rem);
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    /* Stat row — for the social proof / friction-reduction slide */
+    .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(1rem, 2.5vw, 2rem); max-width: min(95vw, 1200px); }
+    .stat { display: flex; flex-direction: column; gap: 0.3rem; }
+    .stat .stat-val {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 5vw, 4rem);
+      color: var(--card-bg);
+      line-height: 1;
+    }
+    .stat .stat-label {
+      font-size: var(--small-size);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      max-width: 12em;
+    }
+
+    /* Demo callout — for the "live demo" cues */
+    .demo-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6em;
+      background: var(--card-bg);
+      color: var(--text-on-card);
+      padding: 0.5em 1em;
+      border-radius: 0.3em;
+      font-family: var(--font-display);
+      font-size: var(--small-size);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+    .demo-banner::before {
+      content: "▶";
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(0.85); }
+    }
+
+    /* Quote slide */
+    .quote-block {
+      max-width: min(85vw, 900px);
+      display: flex; flex-direction: column; gap: 1.5em;
+    }
+    .quote-block blockquote {
+      font-family: var(--font-display);
+      font-size: clamp(1.3rem, 3.4vw, 2.5rem);
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+    .quote-block blockquote::before { content: "\""; color: var(--card-bg); }
+    .quote-block blockquote::after { content: "\""; color: var(--card-bg); }
+    .quote-block .attribution {
+      font-family: var(--font-body);
+      font-size: var(--body-size);
+      color: var(--text-muted);
+    }
+    .quote-block .attribution strong { color: var(--text-primary); }
+
+    /* Architecture diagram — text-first, no SVG dependency */
+    .arch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: clamp(0.75rem, 1.5vw, 1.25rem);
+      max-width: min(95vw, 1200px);
+      align-items: stretch;
+    }
+    .arch-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--rule-color);
+      border-radius: 0.3em;
+      padding: clamp(0.75rem, 1.5vw, 1.25rem);
+      display: flex; flex-direction: column; gap: 0.4em;
+    }
+    .arch-box.primary { background: var(--card-bg); color: var(--text-on-card); border-color: var(--card-bg); }
+    .arch-box .arch-label {
+      font-family: var(--font-body);
+      font-size: var(--small-size);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+    .arch-box.primary .arch-label { opacity: 0.85; }
+    .arch-box .arch-title { font-family: var(--font-display); font-size: clamp(0.95rem, 1.6vw, 1.2rem); line-height: 1.1; }
+    .arch-box .arch-detail { font-size: var(--small-size); line-height: 1.4; opacity: 0.85; }
+
+    /* ===========================================================
+       ANIMATIONS — staggered reveal on slide enter
+       =========================================================== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition:
+        opacity var(--duration-normal) var(--ease-out-expo),
+        transform var(--duration-normal) var(--ease-out-expo);
+    }
+    .slide.visible .reveal { opacity: 1; transform: translateY(0); }
+    .reveal:nth-child(1) { transition-delay: 0.1s; }
+    .reveal:nth-child(2) { transition-delay: 0.2s; }
+    .reveal:nth-child(3) { transition-delay: 0.3s; }
+    .reveal:nth-child(4) { transition-delay: 0.4s; }
+    .reveal:nth-child(5) { transition-delay: 0.5s; }
+    .reveal:nth-child(6) { transition-delay: 0.6s; }
+
+    /* Title slide gets a wider + slower reveal */
+    .title-slide .signal-card {
+      opacity: 0;
+      transform: translateY(40px) scale(0.985);
+      transition:
+        opacity var(--duration-slow) var(--ease-out-expo),
+        transform var(--duration-slow) var(--ease-out-expo);
+      transition-delay: 0.15s;
+    }
+    .title-slide.visible .signal-card { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* ===========================================================
+       PROGRESS BAR + NAV DOTS
+       =========================================================== */
+    .progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 3px;
+      width: 0%;
+      background: var(--card-bg);
+      z-index: 100;
+      transition: width 0.2s linear;
+    }
+    .nav-dots {
+      position: fixed;
+      right: clamp(0.75rem, 1.5vw, 1.25rem);
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.4rem, 0.8vw, 0.6rem);
+      z-index: 50;
+    }
+    .nav-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      border: 1px solid var(--text-muted);
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.3s;
+      padding: 0;
+    }
+    .nav-dot:hover { border-color: var(--card-bg); }
+    .nav-dot.active { background: var(--card-bg); border-color: var(--card-bg); transform: scale(1.4); }
+
+    .keyboard-hint {
+      position: fixed;
+      bottom: clamp(0.75rem, 1.5vw, 1.25rem);
+      right: clamp(0.75rem, 1.5vw, 1.25rem);
+      font-family: var(--font-mono);
+      font-size: clamp(0.6rem, 0.85vw, 0.78rem);
+      color: var(--text-muted);
+      z-index: 50;
+      letter-spacing: 0.05em;
+    }
+
+    /* ===========================================================
+       INLINE EDITING — opt-in (user picked "Yes")
+       JS-controlled visibility (no CSS sibling-selector trick)
+       =========================================================== */
+    .edit-hotzone {
+      position: fixed; top: 0; left: 0;
+      width: 80px; height: 80px;
+      z-index: 10000; cursor: pointer;
+    }
+    .edit-toggle {
+      position: fixed;
+      top: clamp(0.75rem, 1.5vw, 1.25rem);
+      left: clamp(0.75rem, 1.5vw, 1.25rem);
+      width: clamp(2.25rem, 3vw, 2.75rem);
+      height: clamp(2.25rem, 3vw, 2.75rem);
+      border-radius: 50%;
+      background: var(--card-bg);
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: var(--text-on-card);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.2s;
+      z-index: 10001;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+    .edit-toggle:hover { transform: scale(1.08); }
+    .edit-toggle.active { background: #4caf50; }
+
+    .edit-banner {
+      position: fixed;
+      bottom: clamp(0.75rem, 1.5vw, 1.25rem);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--card-bg);
+      color: var(--text-on-card);
+      padding: 0.5em 1em;
+      border-radius: 0.3em;
+      font-family: var(--font-mono);
+      font-size: var(--small-size);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 9999;
+    }
+    .edit-banner.active { opacity: 1; }
+
+    body.edit-active [contenteditable="true"] {
+      outline: 1px dashed var(--card-bg);
+      outline-offset: 4px;
+      cursor: text;
+    }
+    body.edit-active [contenteditable="true"]:focus {
+      outline: 2px solid var(--card-bg);
+      background: rgba(255,87,34,0.05);
+    }
+  </style>
+</head>
+<body>
+
+<!-- =========================================================
+     PROGRESS BAR + NAV DOTS + INLINE EDIT UI
+     ========================================================= -->
+<div class="progress-bar"></div>
+<nav class="nav-dots" aria-label="Slide navigation"></nav>
+<div class="keyboard-hint">← → space  ·  E to edit  ·  Ctrl+S to save</div>
+
+<div class="edit-hotzone" aria-hidden="true"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)" aria-label="Toggle edit mode">✏️</button>
+<div class="edit-banner" id="editBanner">EDIT MODE — click any text to change it · Ctrl+S to save</div>
+
+<!-- =========================================================
+     SLIDE 1 — TITLE
+     "Build with Oracle, Easy" — orange card focal point
+     ========================================================= -->
+<section class="slide title-slide" id="slide-1">
+  <div class="slide-num">01 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="active">Title</span>
+    <span class="inactive">Beginner</span>
+    <span class="inactive">Intermediate</span>
+    <span class="inactive">Advanced</span>
+    <span class="inactive">Demo</span>
+  </div>
+  <div class="slide-content" style="justify-content: flex-end;">
+    <div class="signal-card">
+      <div class="kicker" contenteditable="false">Choose-Your-Path · Oracle AI Database · 2026</div>
+      <h1 contenteditable="false">Build with Oracle.<br/>Easy.</h1>
+      <p class="subhead" contenteditable="false">A skill set that interrogates you, picks an Oracle-AI-DB project at your level, and ships a runnable app powered by Grok 4 + langchain-oracledb + Oracle 26ai Free.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 2 — THE PROMISE
+     What you walk out with after this session
+     ========================================================= -->
+<section class="slide" id="slide-2">
+  <div class="slide-num">02 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="active">Promise</span>
+    <span class="inactive">Beginner</span>
+    <span class="inactive">Intermediate</span>
+    <span class="inactive">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">What you leave with</div>
+    <h2 class="section-title reveal" contenteditable="false">A real, runnable AI app on <em>your</em> laptop — not a slide of pseudocode.</h2>
+    <ul class="bullets reveal" contenteditable="false">
+      <li><strong>Pick a tier.</strong> Beginner ships in an afternoon. Intermediate in a day. Advanced over a long weekend.</li>
+      <li><strong>One <code>sk-…</code> API key.</strong> No OCI tenancy ceremony. No <code>~/.oci/config</code>. Just a bearer token.</li>
+      <li><strong>One Docker stack.</strong> Oracle 26ai Free + Open WebUI come up healthy in under three minutes.</li>
+      <li><strong>One verify.py.</strong> Prove the whole loop end-to-end before you trust the chat answer.</li>
+    </ul>
+    <p class="section-lede reveal" style="margin-top: 0.5em;" contenteditable="false">All three tiers share one skeleton: <code>OracleVS</code> for vector search, Grok 4 over the OpenAI-compatible bearer-token endpoint, and as much memory as the tier needs.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 3 — THE THREE PATHS
+     Beginner / Intermediate / Advanced
+     ========================================================= -->
+<section class="slide" id="slide-3">
+  <div class="slide-num">03 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="active">Three Paths</span>
+    <span class="inactive">Intermediate</span>
+    <span class="inactive">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Pick by complexity, not access</div>
+    <h2 class="section-title reveal" contenteditable="false">Three paths. <em>One</em> skeleton.</h2>
+    <div class="badge-grid reveal">
+      <div class="badge">
+        <div class="badge-num">01</div>
+        <div class="badge-tier" contenteditable="false">Beginner · ~1 afternoon</div>
+        <div class="badge-title" contenteditable="false">PDFs / Markdown / Web → polished chat</div>
+        <div class="badge-desc" contenteditable="false"><code>OracleVS</code> + MiniLM-L6-v2 (Python-side, 384 dim) + Grok 4. Open WebUI on :3000 talks to your FastAPI adapter.</div>
+        <div class="badge-meta" contenteditable="false">RAG · embeddings · chat history</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">02</div>
+        <div class="badge-tier" contenteditable="false">Intermediate · ~1–2 days</div>
+        <div class="badge-title" contenteditable="false">Tool-calling NL2SQL agent</div>
+        <div class="badge-desc" contenteditable="false">Grok 4 with bound tools (<code>list_tables</code>, <code>describe_table</code>, <code>run_sql</code>, <code>vector_search</code>). Embeddings <em>inside</em> Oracle via ONNX.</div>
+        <div class="badge-meta" contenteditable="false">MCP · in-DB ONNX · SQLcl tee</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">03</div>
+        <div class="badge-tier" contenteditable="false">Advanced · ~3–5 days</div>
+        <div class="badge-title" contenteditable="false">Oracle is the only state store</div>
+        <div class="badge-desc" contenteditable="false">JSON Duality + six memory types + agent self-memory that survives kill→restart. Hybrid analyst over PDFs <em>and</em> structured runbooks.</div>
+        <div class="badge-meta" contenteditable="false">duality · self-memory · hybrid</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 4 — THE STACK
+     Show every load-bearing piece on one canvas
+     ========================================================= -->
+<section class="slide" id="slide-4">
+  <div class="slide-num">04 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="active">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="inactive">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">The whole stack on one slide</div>
+    <h2 class="section-title reveal" contenteditable="false">Six moving parts. <em>Five</em> are Oracle's.</h2>
+    <div class="arch reveal">
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Storage + retrieval</div>
+        <div class="arch-title" contenteditable="false">Oracle 26ai Free</div>
+        <div class="arch-detail" contenteditable="false">Vector + JSON + relational, in one container. Same DB an Oracle bank runs.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Vector store</div>
+        <div class="arch-title" contenteditable="false">OracleVS</div>
+        <div class="arch-detail" contenteditable="false"><code>langchain-oracledb 1.3</code>. Native, not a pgvector knockoff.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Embeddings</div>
+        <div class="arch-title" contenteditable="false">MiniLM-L6-v2</div>
+        <div class="arch-detail" contenteditable="false">384-dim, ~90 MB. Python-side at tier 1; <em>inside</em> Oracle at tier 2/3.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">LLM</div>
+        <div class="arch-title" contenteditable="false">xai.grok-4</div>
+        <div class="arch-detail" contenteditable="false">OCI GenAI bearer-token endpoint at us-phoenix-1. One <code>sk-…</code> key.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Memory</div>
+        <div class="arch-title" contenteditable="false">JSON Duality</div>
+        <div class="arch-detail" contenteditable="false">One row, two shapes — relational <em>and</em> document. Six memory types at tier 3.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">UI</div>
+        <div class="arch-title" contenteditable="false">Open WebUI</div>
+        <div class="arch-detail" contenteditable="false">ChatGPT-shaped frontend on :3000. Ships in the same compose file.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 5 — TIER 1 / BEGINNER
+     The shape of the afternoon project
+     ========================================================= -->
+<section class="slide" id="slide-5">
+  <div class="slide-num">05 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="active">Beginner</span>
+    <span class="inactive">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 1 · Beginner</div>
+    <h2 class="section-title reveal" contenteditable="false">Drop a folder of PDFs in. Get a chat that <em>cites</em> them back.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">The classic RAG shape, but the storage and retrieval live <strong>inside Oracle 26ai</strong> — not Chroma, not FAISS, not a SaaS pinned to someone else's billing dashboard.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><code>OracleVS.from_documents()</code> — chunk, embed, write</li>
+          <li><code>OracleVS.as_retriever()</code> — k-NN cosine search</li>
+          <li><code>OracleSummaryStore</code> — chat history that survives restart</li>
+          <li>Same chunking the tier-2/3 paths reuse</li>
+        </ul>
+      </div>
+      <pre class="code" contenteditable="false"><span class="kw">from</span> langchain_oracledb <span class="kw">import</span> OracleVS
+<span class="kw">from</span> langchain_huggingface <span class="kw">import</span> HuggingFaceEmbeddings
+
+emb = <span class="fn">HuggingFaceEmbeddings</span>(
+    <span class="em">model_name</span>=<span class="str">"sentence-transformers/all-MiniLM-L6-v2"</span>,
+)
+
+vs = OracleVS.<span class="fn">from_documents</span>(
+    docs, emb,
+    client=conn,
+    table_name=<span class="str">"DOCUMENTS"</span>,
+    distance_strategy=<span class="str">"COSINE"</span>,
+)
+
+retriever = vs.<span class="fn">as_retriever</span>(search_kwargs={<span class="str">"k"</span>: 4})</pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 6 — BEGINNER USE CASES
+     Three concrete projects all sharing the same skeleton
+     ========================================================= -->
+<section class="slide" id="slide-6">
+  <div class="slide-num">06 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="active">Beginner</span>
+    <span class="inactive">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 1 · three projects, one skeleton</div>
+    <h2 class="section-title reveal" contenteditable="false">Pick the corpus you already <em>have</em> lying around.</h2>
+    <div class="badge-grid reveal">
+      <div class="badge">
+        <div class="badge-num">1.1</div>
+        <div class="badge-tier" contenteditable="false">PDFs-to-chat</div>
+        <div class="badge-title" contenteditable="false">Drop folder · cite by page</div>
+        <div class="badge-desc" contenteditable="false">Per-page chunks + 800-token windows. Citations like <code>release_notes.pdf:p.14</code>. Demo: drop the Oracle 26ai release notes, ask "what's new in vector indexes?"</div>
+        <div class="badge-meta" contenteditable="false">primitive: page-level metadata</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">1.2</div>
+        <div class="badge-tier" contenteditable="false">Markdown-notes-to-chat</div>
+        <div class="badge-title" contenteditable="false">Chat with your second brain</div>
+        <div class="badge-desc" contenteditable="false">Walks Obsidian / Logseq / dotfile notes. Chunks per H2 section, preserves frontmatter as metadata. Demo: "what did I write about distributed locks?"</div>
+        <div class="badge-meta" contenteditable="false">primitive: hierarchy-aware chunking</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">1.3</div>
+        <div class="badge-tier" contenteditable="false">Web-pages-to-chat</div>
+        <div class="badge-title" contenteditable="false">Personal Pocket replacement</div>
+        <div class="badge-desc" contenteditable="false"><code>add.py URL</code> — fetches via <code>trafilatura</code>, embeds, remembers. Demo: save 10 articles over a month → "what's the consensus across what I've read?"</div>
+        <div class="badge-meta" contenteditable="false">primitive: per-document add + rich metadata</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">All three swap exactly <strong>one file</strong>: <code>ingest.py</code> (PDFs / Markdown) or <code>add.py</code> (web). The chain, retriever, adapter, and Open WebUI wiring are identical.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 7 — BEARER-TOKEN AUTH
+     The "no tenancy needed" punchline
+     ========================================================= -->
+<section class="slide" id="slide-7">
+  <div class="slide-num">07 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="active">Beginner</span>
+    <span class="inactive">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Auth — the part that used to take a day</div>
+    <h2 class="section-title reveal" contenteditable="false">One <code>sk-…</code> key. <em>Zero</em> ceremony.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">The OCI Generative AI service exposes an OpenAI-compatible bearer-token endpoint at <code>us-phoenix-1</code>. You don't need <code>~/.oci/config</code>, a compartment OCID, or the SigV1 signer dance. You don't even need a full OCI tenancy.</p>
+        <ul class="bullets" contenteditable="false">
+          <li>Generate the key in the OCI GenAI service console</li>
+          <li>Drop it in <code>.env</code> as <code>OCI_GENAI_API_KEY</code></li>
+          <li>Use the upstream <code>openai</code> Python SDK — no shim</li>
+          <li>Same wire format your other OpenAI code already speaks</li>
+        </ul>
+      </div>
+      <pre class="code" contenteditable="false"><span class="kw">from</span> openai <span class="kw">import</span> OpenAI
+<span class="kw">import</span> os
+
+client = <span class="fn">OpenAI</span>(
+    <span class="em">base_url</span>=<span class="str">"https://inference.generativeai."</span>
+             <span class="str">"us-phoenix-1.oci.oraclecloud.com/v1"</span>,
+    <span class="em">api_key</span>=os.environ[<span class="str">"OCI_GENAI_API_KEY"</span>],
+)
+
+resp = client.chat.completions.<span class="fn">create</span>(
+    model=<span class="str">"xai.grok-4"</span>,   <span class="com"># full id required</span>
+    messages=[{<span class="str">"role"</span>: <span class="str">"user"</span>,
+               <span class="str">"content"</span>: <span class="str">"Reply OK."</span>}],
+    max_tokens=8,
+)
+<span class="fn">print</span>(resp.choices[0].message.content)  <span class="com"># OK</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 8 — TIER 2 / INTERMEDIATE
+     Tools + agents over a real schema
+     ========================================================= -->
+<section class="slide" id="slide-8">
+  <div class="slide-num">08 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 2 · Intermediate</div>
+    <h2 class="section-title reveal" contenteditable="false">Stop sending <em>schemas</em> to the model. Let it call <em>tools</em> instead.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">A LangChain tool-calling agent with four locally-defined <code>BaseTool</code> subclasses — the MCP shape without the separate-server overhead. Grok 4 picks which to call, run by run.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><code>list_tables()</code> — read-only schema discovery</li>
+          <li><code>describe_table(name)</code> — column types, indexes</li>
+          <li><code>run_sql(query)</code> — read-only by default; explicit opt-in for writes</li>
+          <li><code>vector_search(text, k)</code> — over <em>in-DB</em> embeddings</li>
+        </ul>
+        <p class="section-lede" contenteditable="false">Every SQL the agent runs is teed to <code>logs/agent.sql.log</code> via <strong>SQLcl</strong> — so you can replay, audit, or paste into the docs after the demo.</p>
+      </div>
+      <pre class="code" contenteditable="false"><span class="kw">from</span> langchain_core.tools <span class="kw">import</span> BaseTool
+<span class="kw">from</span> langchain_openai <span class="kw">import</span> ChatOpenAI
+
+tools = [<span class="fn">ListTables</span>(), <span class="fn">DescribeTable</span>(),
+         <span class="fn">RunSQL</span>(mode=<span class="str">"read_only"</span>),
+         <span class="fn">VectorSearch</span>(model=<span class="str">"MY_MINILM_V1"</span>)]
+
+llm = <span class="fn">ChatOpenAI</span>(
+    model=<span class="str">"xai.grok-4"</span>,
+    base_url=BEARER_URL,
+    api_key=os.environ[<span class="str">"OCI_GENAI_API_KEY"</span>],
+).<span class="fn">bind_tools</span>(tools)
+
+<span class="com"># Agent loop: LLM picks tool → SQLcl tees → result → LLM</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 9 — INTERMEDIATE USE CASES
+     Three projects: NL2SQL · schema-doc generator · hybrid retrieval
+     ========================================================= -->
+<section class="slide" id="slide-9">
+  <div class="slide-num">09 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 2 · three projects, one tool-calling shape</div>
+    <h2 class="section-title reveal" contenteditable="false">Same agent loop. <em>Different</em> SQL surface area.</h2>
+    <div class="badge-grid reveal">
+      <div class="badge">
+        <div class="badge-num">2.1</div>
+        <div class="badge-tier" contenteditable="false">NL2SQL data explorer</div>
+        <div class="badge-title" contenteditable="false">Ask in English. Get SQL <em>and</em> the answer.</div>
+        <div class="badge-desc" contenteditable="false">Seeded 10-table dummy schema (~50K rows, Faker). Agent calls <code>list_tables</code> → <code>describe_table</code> → <code>run_sql</code>. Returns answer + SQL it ran.</div>
+        <div class="badge-meta" contenteditable="false">demo: "Q3 revenue in EU?"</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">2.2</div>
+        <div class="badge-tier" contenteditable="false">Schema-doc generator + Q&amp;A</div>
+        <div class="badge-title" contenteditable="false">Agent writes back to its <em>own</em> vector store</div>
+        <div class="badge-desc" contenteditable="false">Phase A: agent walks schema, generates plain-language doc per table+column, embeds <em>in one SQL statement</em>. Phase B: RAG over its own docs.</div>
+        <div class="badge-meta" contenteditable="false">demo: "diff between status &amp; state?"</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">2.3</div>
+        <div class="badge-tier" contenteditable="false">Hybrid retrieval (vector + SQL)</div>
+        <div class="badge-title" contenteditable="false">Two corpora. <em>One</em> database.</div>
+        <div class="badge-desc" contenteditable="false">Invoice PDFs (vector) + invoice rows (relational). Agent picks vector, SQL, or both. Joinable in one Oracle round-trip — try that with Postgres + Pinecone.</div>
+        <div class="badge-meta" contenteditable="false">demo: "find unpaid invoices like this PDF"</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 10 — IN-DB ONNX EMBEDDINGS
+     The "embeddings move into the database" punchline
+     ========================================================= -->
+<section class="slide" id="slide-10">
+  <div class="slide-num">10 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Beginner</span>
+    <span class="active">Intermediate</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Embeddings move <em>into</em> the database</div>
+    <h2 class="section-title reveal" contenteditable="false">Same model. <em>No</em> Python embedder process.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">Tier 1 ran <code>HuggingFaceEmbeddings</code> in Python. Tier 2 registers the <em>same</em> MiniLM-L6-v2 ONNX model <strong>inside</strong> Oracle and calls <code>VECTOR_EMBEDDING(MODEL ... USING text)</code> as a SQL primitive.</p>
+        <ul class="bullets" contenteditable="false">
+          <li>Register once via the <code>onnx2oracle</code> CLI</li>
+          <li>One round-trip: query in, vector out, all in-database</li>
+          <li>Embeddings + vector search + relational filters in <em>one</em> SQL plan</li>
+          <li>No Python dependency on the retrieval path</li>
+        </ul>
+      </div>
+      <pre class="code" contenteditable="false"><span class="com"># 1. Register the ONNX model (one-time)</span>
+$ onnx2oracle export --preset all-MiniLM-L6-v2 \
+                     --output minilm.onnx
+$ onnx2oracle import \
+    --dsn user/pwd@host:port/service \
+    --onnx minilm.onnx \
+    --model-name MY_MINILM_V1
+
+<span class="com"># 2. Embed and search in one SQL pass</span>
+<span class="kw">SELECT</span> id, text,
+       <span class="fn">VECTOR_DISTANCE</span>(
+         embedding,
+         <span class="fn">VECTOR_EMBEDDING</span>(
+           <span class="em">MY_MINILM_V1</span> <span class="kw">USING</span> :q
+         ),
+         <span class="kw">COSINE</span>
+       ) <span class="kw">AS</span> dist
+<span class="kw">FROM</span>   chunks
+<span class="kw">ORDER BY</span> dist
+<span class="kw">FETCH FIRST</span> 4 <span class="kw">ROWS ONLY</span>;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 11 — TIER 3 / ADVANCED INTRO
+     Six memory types · self-memory · JSON Duality
+     ========================================================= -->
+<section class="slide" id="slide-11">
+  <div class="slide-num">11 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 3 · Advanced</div>
+    <h2 class="section-title reveal" contenteditable="false">Oracle stops being <em>a</em> store. It becomes <em>the only</em> store.</h2>
+    <p class="section-lede reveal" contenteditable="false">Conversation history, episodic memory of past tool runs, semantic memory of learned facts, procedural memory of which tool sequences worked, working memory for the active step, and identity memory of who the agent <em>is</em> — all six types live in one Oracle 26ai database, queried two ways through a single JSON Duality View.</p>
+    <ul class="bullets reveal" contenteditable="false">
+      <li><strong>One row, two shapes.</strong> Relational columns for joins, JSON document for the agent's natural shape — same row, server-managed.</li>
+      <li><strong>Self-memory.</strong> Process A learns something. Process A dies. Process B starts cold and quotes the learned fact <em>verbatim</em>.</li>
+      <li><strong>Hybrid retrieval.</strong> A single agent answers questions that need <em>both</em> a PDF chunk <em>and</em> a structured runbook row to respond well.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 12 — ADVANCED USE CASES
+     Three projects composed from skills/ building blocks
+     ========================================================= -->
+<section class="slide" id="slide-12">
+  <div class="slide-num">12 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Tier 3 · three projects, composed from building blocks</div>
+    <h2 class="section-title reveal" contenteditable="false">Each project leans on the same three skills. Different <em>app logic</em>.</h2>
+    <div class="badge-grid reveal">
+      <div class="badge">
+        <div class="badge-num">3.1</div>
+        <div class="badge-tier" contenteditable="false">Hybrid analyst</div>
+        <div class="badge-title" contenteditable="false">Production-feeling data analyst</div>
+        <div class="badge-desc" contenteditable="false">Routes each turn: data → SQL family, knowledge → vector family, both → fuses. Glossary + runbooks + decisions <em>and</em> live schema, single agent.</div>
+        <div class="badge-meta" contenteditable="false">demo: "explain this churn spike using our runbooks"</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">3.2</div>
+        <div class="badge-tier" contenteditable="false">Self-improving researcher</div>
+        <div class="badge-title" contenteditable="false">AutoGPT-shape · constrained to Oracle</div>
+        <div class="badge-desc" contenteditable="false">Three memory types: <code>TOOL_REGISTRY</code> (relational), <code>TOOL_RUNS</code> (vector), <code>SESSION_SUMMARIES</code> (vector). Future runs retrieve from past tool outcomes before acting.</div>
+        <div class="badge-meta" contenteditable="false">demo: cold→kill→warm verbatim recall</div>
+      </div>
+      <div class="badge">
+        <div class="badge-num">3.3</div>
+        <div class="badge-tier" contenteditable="false">Conversational schema designer</div>
+        <div class="badge-title" contenteditable="false">Build a working DB from a conversation</div>
+        <div class="badge-desc" contenteditable="false">The only project with <code>sql_mode=read_write</code> (gated by UI confirm). DDL via MCP, JSON Duality views auto-generated, NL → INSERTs, replayable migrations.</div>
+        <div class="badge-meta" contenteditable="false">demo: "track pottery commissions" → live schema</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Each idea is ~700–1100 LOC of <em>application</em> code — the rest is composed from <code>oracle-aidb-docker-setup</code>, <code>langchain-oracledb-helper</code>, and <code>oracle-mcp-server-helper</code>.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 13 — ADVANCED CODE / SELF-MEMORY
+     The verbatim cold→kill→warm proof
+     ========================================================= -->
+<section class="slide" id="slide-13">
+  <div class="slide-num">13 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Self-memory across processes</div>
+    <h2 class="section-title reveal" contenteditable="false">Cold → kill → warm. The agent <em>remembers</em>.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false">In the v2 walk-through, an agent fetched the AI Vector Search guide, summarised it, and stored the summary in a JSON Duality View. We killed the FastAPI process. A fresh process — different PID, empty Python heap — answered a follow-up question with the stored text <strong>verbatim</strong>.</p>
+        <p class="section-lede" contenteditable="false">No vector cache replay. No serialised chain state. Just SQL.</p>
+      </div>
+      <pre class="code" contenteditable="false"><span class="com"># Process A — store</span>
+view.<span class="fn">insert</span>({
+  <span class="str">"agent_id"</span>: <span class="str">"researcher-01"</span>,
+  <span class="str">"memory_type"</span>: <span class="str">"semantic"</span>,
+  <span class="str">"text"</span>: summary,
+  <span class="str">"source_url"</span>: doc.url,
+  <span class="str">"embedded_at"</span>: now(),
+})
+<span class="com"># &lt;Ctrl-C the FastAPI server&gt;</span>
+
+<span class="com"># Process B — fresh PID, empty heap</span>
+hits = view.<span class="fn">vector_search</span>(
+  query=<span class="str">"How does Oracle implement HNSW?"</span>,
+  k=1, agent_id=<span class="str">"researcher-01"</span>,
+)
+<span class="kw">assert</span> hits[0].text <span class="kw">in</span> answer  <span class="com"># PASS</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 14 — THE FRICTION-PASS NUMBERS
+     Why the skills are battle-tested, not aspirational
+     ========================================================= -->
+<section class="slide" id="slide-14">
+  <div class="slide-num">14 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Battle-tested, not aspirational</div>
+    <h2 class="section-title reveal" contenteditable="false">We walked the whole thing <em>twice</em>. Then a third time, cold.</h2>
+    <div class="stat-row reveal">
+      <div class="stat">
+        <div class="stat-val">81%</div>
+        <div class="stat-label" contenteditable="false">friction reduction across v1 → v2 walks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">8/8</div>
+        <div class="stat-label" contenteditable="false">scaffolds verified end-to-end against live Oracle 26ai + Grok 4</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">4</div>
+        <div class="stat-label" contenteditable="false">parallel cold-start agents — isolated by port, volume, env</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val">0</div>
+        <div class="stat-label" contenteditable="false">OCI tenancies, ~/.oci/config files, or compartment OCIDs required</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Every finding from the walks fed back into the skills. The next attendee starts where the last one stopped.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 15 — DEMO
+     The live moment
+     ========================================================= -->
+<section class="slide" id="slide-15">
+  <div class="slide-num">15 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Demo</span>
+  </div>
+  <div class="slide-content">
+    <div class="demo-banner reveal" contenteditable="false">Live demo · ~6 minutes</div>
+    <h2 class="section-title reveal" contenteditable="false">From <code>git clone</code> to a chat that cites a PDF — <em>on stage</em>.</h2>
+    <ul class="bullets reveal" contenteditable="false">
+      <li><strong>00:00</strong> — <code>git clone</code> + open <code>choose-your-path/SKILL.md</code> in Claude Code</li>
+      <li><strong>00:30</strong> — Pick "beginner / PDFs" in the interview</li>
+      <li><strong>01:30</strong> — <code>docker compose up</code> brings 26ai + Open WebUI up healthy</li>
+      <li><strong>03:00</strong> — Drop three PDF chapters in <code>corpus/</code>, run <code>ingest.py</code></li>
+      <li><strong>04:30</strong> — Hit Open WebUI on <code>:3000</code>, ask a question that requires retrieval</li>
+      <li><strong>05:30</strong> — Show the cited row in <code>SQL Developer</code> — the source of truth</li>
+    </ul>
+    <p class="section-lede reveal" contenteditable="false">If the wifi dies, the prefetched seed corpus and pre-pulled Oracle image keep the demo on its feet. The <code>verify.py</code> exit code is what we trust — not the wall clock.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 16 — Q&A FRAMING / WHAT TO ASK ME
+     Anchors the audience for the next 5 minutes
+     ========================================================= -->
+<section class="slide" id="slide-16">
+  <div class="slide-num">16 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Q&amp;A</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Q&amp;A — anchors</div>
+    <h2 class="section-title reveal" contenteditable="false">Things I'll happily get into. <em>Ask.</em></h2>
+    <ul class="bullets reveal" contenteditable="false">
+      <li><strong>Why <code>OracleVS</code> over pgvector / Pinecone / Weaviate?</strong> — the JSON-and-relational-and-vector story.</li>
+      <li><strong>How is in-DB ONNX different from a UDF wrapper?</strong> — model registry vs. one-off function.</li>
+      <li><strong>What does JSON Duality buy that a JSON column doesn't?</strong> — the "one row, two shapes" trick.</li>
+      <li><strong>Where does Grok 4 break, where does Cohere shine?</strong> — model swap is one env var.</li>
+      <li><strong>Can I run this without OCI at all?</strong> — yes; the <code>archive/</code> branch keeps Ollama-flavoured paths.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 17 — CLOSE / THANK YOU + LINKS
+     ========================================================= -->
+<section class="slide" id="slide-17">
+  <div class="slide-num">17 / 17</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Close</span>
+  </div>
+  <div class="slide-content" style="justify-content: flex-end;">
+    <div class="signal-card">
+      <div class="kicker" contenteditable="false">Take it home tonight</div>
+      <h1 contenteditable="false">Build with Oracle.<br/>Tonight.</h1>
+      <p class="subhead" contenteditable="false">github.com/oracle-devrel/oracle-ai-developer-hub<br/>→ choose-your-path/<br/>→ pick a tier · ship a chat that cites your data · go to bed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     PRESENTATION CONTROLLER
+     ========================================================= -->
+<script>
+(function() {
+  'use strict';
+
+  // ---------- Slide presentation controller ----------
+  class SlidePresentation {
+    constructor() {
+      this.slides = Array.from(document.querySelectorAll('.slide'));
+      this.currentSlide = 0;
+      this.progressBar = document.querySelector('.progress-bar');
+      this.navDotsContainer = document.querySelector('.nav-dots');
+      this.setupNavDots();
+      this.setupIntersectionObserver();
+      this.setupKeyboardNav();
+      this.setupTouchNav();
+      this.setupScrollProgress();
+    }
+
+    // Build the dot navigator on the right edge.
+    // IMPORTANT: clear before building — otherwise re-rendering after
+    // an outerHTML capture (used by the inline editor) doubles the dots.
+    setupNavDots() {
+      this.navDotsContainer.innerHTML = '';
+      this.slides.forEach((slide, i) => {
+        const dot = document.createElement('button');
+        dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+        dot.type = 'button';
+        dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+        dot.addEventListener('click', () => this.goTo(i));
+        this.navDotsContainer.appendChild(dot);
+      });
+    }
+
+    // Reveal animations + active-dot tracking via IntersectionObserver.
+    setupIntersectionObserver() {
+      const dots = this.navDotsContainer.querySelectorAll('.nav-dot');
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting && e.intersectionRatio >= 0.55) {
+            e.target.classList.add('visible');
+            const i = this.slides.indexOf(e.target);
+            this.currentSlide = i;
+            dots.forEach((d, di) => d.classList.toggle('active', di === i));
+          }
+        });
+      }, { threshold: [0.55] });
+      this.slides.forEach((s) => obs.observe(s));
+      // Force the first slide visible immediately so reveal animations
+      // run on initial paint (the observer threshold fires asynchronously).
+      this.slides[0].classList.add('visible');
+    }
+
+    setupKeyboardNav() {
+      document.addEventListener('keydown', (e) => {
+        // Don't capture arrows when the user is editing text.
+        if (document.activeElement && document.activeElement.getAttribute('contenteditable') === 'true') return;
+        if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowRight') {
+          e.preventDefault(); this.goTo(this.currentSlide + 1);
+        } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'ArrowLeft') {
+          e.preventDefault(); this.goTo(this.currentSlide - 1);
+        } else if (e.key === 'Home') {
+          e.preventDefault(); this.goTo(0);
+        } else if (e.key === 'End') {
+          e.preventDefault(); this.goTo(this.slides.length - 1);
+        }
+      });
+    }
+
+    setupTouchNav() {
+      let startY = 0;
+      document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+      document.addEventListener('touchend', (e) => {
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dy) > 50) this.goTo(this.currentSlide + (dy < 0 ? 1 : -1));
+      }, { passive: true });
+    }
+
+    setupScrollProgress() {
+      const update = () => {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        const pct = max > 0 ? (window.scrollY / max) * 100 : 0;
+        this.progressBar.style.width = pct + '%';
+      };
+      window.addEventListener('scroll', update, { passive: true });
+      update();
+    }
+
+    goTo(i) {
+      i = Math.max(0, Math.min(this.slides.length - 1, i));
+      this.slides[i].scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  // ---------- Inline editor (opt-in: user picked Yes) ----------
+  class InlineEditor {
+    constructor() {
+      this.isActive = false;
+      this.toggle = document.getElementById('editToggle');
+      this.banner = document.getElementById('editBanner');
+      this.hotzone = document.querySelector('.edit-hotzone');
+      this.editables = Array.from(document.querySelectorAll('[contenteditable]'));
+      this.bindHotzone();
+      this.bindToggle();
+      this.bindKeyboard();
+      this.bindAutoSave();
+      this.restoreFromLocalStorage();
+    }
+
+    bindHotzone() {
+      let hideTimeout = null;
+      const showBtn = () => { clearTimeout(hideTimeout); this.toggle.classList.add('show'); };
+      const hideBtn = () => {
+        hideTimeout = setTimeout(() => {
+          if (!this.isActive) this.toggle.classList.remove('show');
+        }, 400);
+      };
+      this.hotzone.addEventListener('mouseenter', showBtn);
+      this.hotzone.addEventListener('mouseleave', hideBtn);
+      this.toggle.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+      this.toggle.addEventListener('mouseleave', hideBtn);
+      this.hotzone.addEventListener('click', () => this.toggleEditMode());
+    }
+
+    bindToggle() {
+      this.toggle.addEventListener('click', () => this.toggleEditMode());
+    }
+
+    bindKeyboard() {
+      document.addEventListener('keydown', (e) => {
+        // Toggle with E (skip when already editing).
+        if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
+          this.toggleEditMode();
+        }
+        // Ctrl+S / Cmd+S to export.
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          this.exportFile();
+        }
+      });
+    }
+
+    // Autosave to localStorage on any text change so a stage refresh
+    // doesn't lose live edits.
+    bindAutoSave() {
+      const save = () => {
+        const map = {};
+        this.editables.forEach((el, i) => { map['ed_' + i] = el.innerHTML; });
+        try { localStorage.setItem('cyp-deck-edits', JSON.stringify(map)); } catch (_) { /* quota */ }
+      };
+      this.editables.forEach((el) => {
+        el.addEventListener('input', save);
+        el.addEventListener('blur', save);
+      });
+    }
+
+    restoreFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem('cyp-deck-edits');
+        if (!raw) return;
+        const map = JSON.parse(raw);
+        this.editables.forEach((el, i) => {
+          if (map['ed_' + i] !== undefined) el.innerHTML = map['ed_' + i];
+        });
+      } catch (_) { /* corrupt — ignore */ }
+    }
+
+    toggleEditMode() {
+      this.isActive = !this.isActive;
+      document.body.classList.toggle('edit-active', this.isActive);
+      this.toggle.classList.toggle('active', this.isActive);
+      this.banner.classList.toggle('active', this.isActive);
+      this.toggle.textContent = this.isActive ? '✓' : '✏️';
+      this.editables.forEach((el) => el.setAttribute('contenteditable', this.isActive ? 'true' : 'false'));
+    }
+
+    // CRITICAL: strip live edit state so the saved file opens cleanly,
+    // then restore so the user can keep editing in the live tab.
+    exportFile() {
+      const wasActive = this.isActive;
+      this.editables.forEach((el) => el.removeAttribute('contenteditable'));
+      document.body.classList.remove('edit-active');
+      this.toggle.classList.remove('active', 'show');
+      this.banner.classList.remove('active', 'show');
+
+      const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+      if (wasActive) {
+        document.body.classList.add('edit-active');
+        this.editables.forEach((el) => el.setAttribute('contenteditable', 'true'));
+        this.toggle.classList.add('active');
+        this.banner.classList.add('active');
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'build-with-oracle-easy.html';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  }
+
+  // Make editables editable only when the user has toggled edit mode on,
+  // so the deck behaves like a normal presentation by default.
+  document.querySelectorAll('[contenteditable]').forEach((el) => el.setAttribute('contenteditable', 'false'));
+
+  new SlidePresentation();
+  new InlineEditor();
+})();
+</script>
+
+</body>
+</html>
