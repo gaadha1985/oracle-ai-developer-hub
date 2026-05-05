@@ -1207,6 +1207,49 @@ $ onnx2oracle import \
 </section>
 
 <!-- =========================================================
+     SLIDE 18 — MULTI-AGENT RAG (apps/agentic_rag)
+     Retrieval, reasoning, tool use as separate agents
+     ========================================================= -->
+<section class="slide" id="slide-18">
+  <div class="slide-num">18 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Beyond single-pipeline RAG</div>
+    <h2 class="section-title reveal" contenteditable="false">Retrieval. Reasoning. Tool use. <em>Three</em> agents, one query.</h2>
+    <div class="two-col reveal">
+      <div class="col-stack">
+        <p class="section-lede" contenteditable="false"><code>apps/agentic_rag/</code> splits the work that beginner-tier RAG does in one chain across three specialised agents. Each agent owns one decision; the orchestrator (LangGraph) wires them; <code>oracleagentmemory</code> carries the conversation state across them.</p>
+        <ul class="bullets" contenteditable="false">
+          <li><strong>Retrieval agent.</strong> Picks the collection (RUNBOOKS / GLOSSARY / DECISIONS), runs vector search, ranks results.</li>
+          <li><strong>Reasoning agent.</strong> Plans the answer over the retrieved context using CoT or ReAct.</li>
+          <li><strong>Tool agent.</strong> Calls Oracle MCP if SQL or fresh-data lookup is needed mid-answer.</li>
+        </ul>
+      </div>
+<pre class="code" contenteditable="false"><span class="kw">from</span> langgraph.graph <span class="kw">import</span> StateGraph
+
+graph = <span class="fn">StateGraph</span>(AgentState)
+graph.<span class="fn">add_node</span>(<span class="str">"retrieve"</span>, retrieval_agent)
+graph.<span class="fn">add_node</span>(<span class="str">"reason"</span>,   reasoning_agent)
+graph.<span class="fn">add_node</span>(<span class="str">"tools"</span>,    tool_agent)
+
+graph.<span class="fn">add_edge</span>(<span class="str">"retrieve"</span>, <span class="str">"reason"</span>)
+graph.<span class="fn">add_conditional_edges</span>(<span class="str">"reason"</span>,
+    route=<span class="kw">lambda</span> s: <span class="str">"tools"</span> <span class="kw">if</span> s.needs_sql <span class="kw">else</span> END,
+)
+
+<span class="com"># Conversation state via OAMP, not in-process memory</span>
+thread = client.<span class="fn">create_thread</span>(user_id, agent_id)</pre>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
      SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
