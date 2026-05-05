@@ -1053,7 +1053,49 @@ agent = <span class="fn">create_react_agent</span>(llm, tools=oracle_mcp_tools)<
 </section>
 
 <!-- =========================================================
-     SLIDE 11 — TIER 3 / ADVANCED INTRO
+     SLIDE 14 — LANGCHAIN-ORACLEDB VALUE PROPS
+     Vector store · chat history · loaders · JSON Duality bridge
+     ========================================================= -->
+<section class="slide" id="slide-14">
+  <div class="slide-num">14 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">The framework that already <em>knows</em> Oracle</div>
+    <h2 class="section-title reveal" contenteditable="false"><code>langchain-oracledb</code> — what the framework gives you for free.</h2>
+    <div class="arch reveal" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Vector</div>
+        <div class="arch-title" contenteditable="false">OracleVS</div>
+        <div class="arch-detail" contenteditable="false">Multi-collection vector store — RUNBOOKS, GLOSSARY, DECISIONS — IVF or HNSW indexes, COSINE/DOT/L2.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Chat</div>
+        <div class="arch-title" contenteditable="false">OracleChatMessageHistory</div>
+        <div class="arch-detail" contenteditable="false">Single-user simple chat log on the same connection. The "no extraction needed" tier.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Loaders</div>
+        <div class="arch-title" contenteditable="false">OracleDocLoader + Splitter</div>
+        <div class="arch-detail" contenteditable="false">Load PDFs, web, files. Chunk semantically. Same Oracle connection as the sink.</div>
+      </div>
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Bridge</div>
+        <div class="arch-title" contenteditable="false">JSON Duality view bridge</div>
+        <div class="arch-detail" contenteditable="false">Read your relational data as documents — without copying it. Tier 3's "one row, two shapes" trick.</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">The framework brings the storage. You bring the agent. <code>OracleVS</code> for fixed RAG corpora, <code>OracleChatMessageHistory</code> when a chat log is enough — and <code>oracleagentmemory</code> (slide 13) when the conversation deserves a real memory layer.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 16 — TIER 3 / ADVANCED INTRO
      Six memory types · self-memory · JSON Duality
      ========================================================= -->
 <section class="slide" id="slide-16">
