@@ -1170,7 +1170,44 @@ $ onnx2oracle import \
 </section>
 
 <!-- =========================================================
-     SLIDE 12 — ADVANCED USE CASES
+     SLIDE 17 — VISUAL-ORACLEDB
+     Converged DB — vector + graph + JSON Duality, one connection
+     ========================================================= -->
+<section class="slide" id="slide-17">
+  <div class="slide-num">17 / 28</div>
+  <div class="slide-breadcrumb">
+    <span class="inactive">Title</span>
+    <span class="inactive">Promise</span>
+    <span class="inactive">Stack</span>
+    <span class="inactive">Intermediate</span>
+    <span class="active">Advanced</span>
+  </div>
+  <div class="slide-content">
+    <div class="section-eyebrow reveal" contenteditable="false">Converged DB · semantic search + graphify</div>
+    <h2 class="section-title reveal" contenteditable="false"><code>visual-oracledb</code> — semantic search and <em>graphify</em>, one connection.</h2>
+    <div class="arch reveal">
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Vector</div>
+        <div class="arch-title" contenteditable="false">VECTOR_DISTANCE</div>
+        <div class="arch-detail" contenteditable="false">k-NN over a 1M-row corpus. IVF (~0.88-0.90 recall@10) or HNSW (~0.95-0.97). Same SQL surface.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Graph</div>
+        <div class="arch-title" contenteditable="false">MATCH (n)-[r]-&gt;(m)</div>
+        <div class="arch-detail" contenteditable="false">Property graphs over the same schema. Walk relationships you'd otherwise denormalize into JSON.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Duality</div>
+        <div class="arch-title" contenteditable="false">SELECT * FROM customer_dv</div>
+        <div class="arch-detail" contenteditable="false">JSON Duality View — read your relational rows as documents. One row, two shapes, server-managed.</div>
+      </div>
+    </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">RAG, graph traversal, and analytics — same DBA, same backup, same auth. The advanced tier (slides 23 onward) leans on this: hybrid analyst (3.1) routes between vector and SQL, schema designer (3.3) ships JSON Duality views from a conversation.</p>
+  </div>
+</section>
+
+<!-- =========================================================
+     SLIDE 23 — ADVANCED USE CASES
      Three projects composed from skills/ building blocks
      ========================================================= -->
 <section class="slide" id="slide-23">
