@@ -4,8 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Build with Oracle, Easy — choose-your-path AI session</title>
-  <!-- 17 slides. Use-case slides for each tier sit immediately after each tier
-       intro: beginner @ slide 6, intermediate @ slide 9, advanced @ slide 12. -->
+  <!-- 28 slides. Tier ledes: beginner @ slide 5, intermediate @ slide 8, advanced @ slide 13.
+       Tier badge slides: beginner @ slide 7, intermediate @ slide 12, advanced @ slide 23.
+       Demo @ slide 26. Per docs/superpowers/plans/2026-05-05-cyp-deck-expansion.md. -->
 
 
   <!-- ── Fonts: Archivo Black for display + Space Grotesk for body + JetBrains Mono for code ── -->
@@ -540,7 +541,7 @@
      "Build with Oracle, Easy" — orange card focal point
      ========================================================= -->
 <section class="slide title-slide" id="slide-1">
-  <div class="slide-num">01 / 17</div>
+  <div class="slide-num">01 / 28</div>
   <div class="slide-breadcrumb">
     <span class="active">Title</span>
     <span class="inactive">Beginner</span>
@@ -562,7 +563,7 @@
      What you walk out with after this session
      ========================================================= -->
 <section class="slide" id="slide-2">
-  <div class="slide-num">02 / 17</div>
+  <div class="slide-num">02 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="active">Promise</span>
@@ -588,7 +589,7 @@
      Beginner / Intermediate / Advanced
      ========================================================= -->
 <section class="slide" id="slide-3">
-  <div class="slide-num">03 / 17</div>
+  <div class="slide-num">03 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -630,7 +631,7 @@
      Show every load-bearing piece on one canvas
      ========================================================= -->
 <section class="slide" id="slide-4">
-  <div class="slide-num">04 / 17</div>
+  <div class="slide-num">04 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -681,7 +682,7 @@
      The shape of the afternoon project
      ========================================================= -->
 <section class="slide" id="slide-5">
-  <div class="slide-num">05 / 17</div>
+  <div class="slide-num">05 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -726,7 +727,7 @@ retriever = vs.<span class="fn">as_retriever</span>(search_kwargs={<span class="
      Three concrete projects all sharing the same skeleton
      ========================================================= -->
 <section class="slide" id="slide-6">
-  <div class="slide-num">06 / 17</div>
+  <div class="slide-num">06 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -769,7 +770,7 @@ retriever = vs.<span class="fn">as_retriever</span>(search_kwargs={<span class="
      The "no tenancy needed" punchline
      ========================================================= -->
 <section class="slide" id="slide-7">
-  <div class="slide-num">07 / 17</div>
+  <div class="slide-num">07 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -815,7 +816,7 @@ resp = client.chat.completions.<span class="fn">create</span>(
      Tools + agents over a real schema
      ========================================================= -->
 <section class="slide" id="slide-8">
-  <div class="slide-num">08 / 17</div>
+  <div class="slide-num">08 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -860,7 +861,7 @@ llm = <span class="fn">ChatOpenAI</span>(
      Three projects: NL2SQL · schema-doc generator · hybrid retrieval
      ========================================================= -->
 <section class="slide" id="slide-9">
-  <div class="slide-num">09 / 17</div>
+  <div class="slide-num">09 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -902,7 +903,7 @@ llm = <span class="fn">ChatOpenAI</span>(
      The "embeddings move into the database" punchline
      ========================================================= -->
 <section class="slide" id="slide-10">
-  <div class="slide-num">10 / 17</div>
+  <div class="slide-num">10 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -952,7 +953,7 @@ $ onnx2oracle import \
      Six memory types · self-memory · JSON Duality
      ========================================================= -->
 <section class="slide" id="slide-11">
-  <div class="slide-num">11 / 17</div>
+  <div class="slide-num">11 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -977,7 +978,7 @@ $ onnx2oracle import \
      Three projects composed from skills/ building blocks
      ========================================================= -->
 <section class="slide" id="slide-12">
-  <div class="slide-num">12 / 17</div>
+  <div class="slide-num">12 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -1020,7 +1021,7 @@ $ onnx2oracle import \
      The verbatim cold→kill→warm proof
      ========================================================= -->
 <section class="slide" id="slide-13">
-  <div class="slide-num">13 / 17</div>
+  <div class="slide-num">13 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -1061,7 +1062,7 @@ hits = view.<span class="fn">vector_search</span>(
      Why the skills are battle-tested, not aspirational
      ========================================================= -->
 <section class="slide" id="slide-14">
-  <div class="slide-num">14 / 17</div>
+  <div class="slide-num">14 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -1099,7 +1100,7 @@ hits = view.<span class="fn">vector_search</span>(
      The live moment
      ========================================================= -->
 <section class="slide" id="slide-15">
-  <div class="slide-num">15 / 17</div>
+  <div class="slide-num">15 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -1127,7 +1128,7 @@ hits = view.<span class="fn">vector_search</span>(
      Anchors the audience for the next 5 minutes
      ========================================================= -->
 <section class="slide" id="slide-16">
-  <div class="slide-num">16 / 17</div>
+  <div class="slide-num">16 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
@@ -1152,7 +1153,7 @@ hits = view.<span class="fn">vector_search</span>(
      SLIDE 17 — CLOSE / THANK YOU + LINKS
      ========================================================= -->
 <section class="slide" id="slide-17">
-  <div class="slide-num">17 / 17</div>
+  <div class="slide-num">17 / 28</div>
   <div class="slide-breadcrumb">
     <span class="inactive">Title</span>
     <span class="inactive">Promise</span>
