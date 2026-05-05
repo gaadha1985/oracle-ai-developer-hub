@@ -678,8 +678,8 @@
 </section>
 
 <!-- =========================================================
-     SLIDE 5 — TIER 1 / BEGINNER
-     The shape of the afternoon project
+     SLIDE 5 — TIER 1 / BEGINNER LEDE
+     OCI GenAI + langchain-oracledb + in-DB ONNX = one RAG pipeline
      ========================================================= -->
 <section class="slide" id="slide-5">
   <div class="slide-num">05 / 28</div>
@@ -692,33 +692,25 @@
   </div>
   <div class="slide-content">
     <div class="section-eyebrow reveal" contenteditable="false">Tier 1 · Beginner</div>
-    <h2 class="section-title reveal" contenteditable="false">Drop a folder of PDFs in. Get a chat that <em>cites</em> them back.</h2>
-    <div class="two-col reveal">
-      <div class="col-stack">
-        <p class="section-lede" contenteditable="false">The classic RAG shape, but the storage and retrieval live <strong>inside Oracle 26ai</strong> — not Chroma, not FAISS, not a SaaS pinned to someone else's billing dashboard.</p>
-        <ul class="bullets" contenteditable="false">
-          <li><code>OracleVS.from_documents()</code> — chunk, embed, write</li>
-          <li><code>OracleVS.as_retriever()</code> — k-NN cosine search</li>
-          <li><code>OracleSummaryStore</code> — chat history that survives restart</li>
-          <li>Same chunking the tier-2/3 paths reuse</li>
-        </ul>
+    <h2 class="section-title reveal" contenteditable="false">OCI GenAI plus <code>langchain-oracledb</code> plus in-DB ONNX. Three libraries. <em>One</em> RAG pipeline.</h2>
+    <div class="arch reveal">
+      <div class="arch-box primary">
+        <div class="arch-label" contenteditable="false">Inference</div>
+        <div class="arch-title" contenteditable="false">OCI GenAI</div>
+        <div class="arch-detail" contenteditable="false">Bearer-token chat completion, OpenAI-compatible. One <code>OCI_GENAI_API_KEY</code> env var, no <code>~/.oci/config</code>.</div>
       </div>
-      <pre class="code" contenteditable="false"><span class="kw">from</span> langchain_oracledb <span class="kw">import</span> OracleVS
-<span class="kw">from</span> langchain_huggingface <span class="kw">import</span> HuggingFaceEmbeddings
-
-emb = <span class="fn">HuggingFaceEmbeddings</span>(
-    <span class="em">model_name</span>=<span class="str">"sentence-transformers/all-MiniLM-L6-v2"</span>,
-)
-
-vs = OracleVS.<span class="fn">from_documents</span>(
-    docs, emb,
-    client=conn,
-    table_name=<span class="str">"DOCUMENTS"</span>,
-    distance_strategy=<span class="str">"COSINE"</span>,
-)
-
-retriever = vs.<span class="fn">as_retriever</span>(search_kwargs={<span class="str">"k"</span>: 4})</pre>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Storage</div>
+        <div class="arch-title" contenteditable="false">langchain-oracledb</div>
+        <div class="arch-detail" contenteditable="false">Vector store, chat history, JSON Duality — all on the same Oracle connection.</div>
+      </div>
+      <div class="arch-box">
+        <div class="arch-label" contenteditable="false">Embeddings</div>
+        <div class="arch-title" contenteditable="false">In-DB ONNX (MY_MINILM_V1)</div>
+        <div class="arch-detail" contenteditable="false">384-dim model registered inside Oracle. No separate Python embedder process.</div>
+      </div>
     </div>
+    <p class="section-lede reveal" style="margin-top: 0.4em;" contenteditable="false">Drop PDFs or web pages into <code>corpus/</code>. <code>OracleVS.from_documents()</code> chunks, embeds, and writes — then chat answers cite the rows back. Same skeleton the tier-2 and tier-3 paths reuse.</p>
   </div>
 </section>
 
