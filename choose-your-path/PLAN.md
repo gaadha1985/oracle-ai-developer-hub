@@ -233,7 +233,7 @@ The skill teaches that pattern first, then layers on `add_texts()` (insert more 
 
 **Hard rules.**
 - Vector column dim must match embedder — but the user never sets it; `OracleVS` derives it from the embeddings instance. Skill validates by reading `embeddings.embed_query("test")` length once before scaffolding.
-- OCI region pinning: Grok 4 = `us-chicago-1` only. Skill warns + offers Cohere/Llama as regional alternatives.
+- OCI auth model: bearer-token API key (`OCI_GENAI_API_KEY`, a `sk-...` value from the OCI GenAI service console) against the OpenAI-compatible endpoint at `us-phoenix-1`. No `~/.oci/config`, no compartment OCID, no SigV1 ceremony — the simpler path that drops the OCI-tenancy prerequisite for influencer demos.
 - Bind variables for vectors use `array.array("f", qv)` — only relevant if the user drops below LangChain into raw `oracledb`. Skill mentions this once and moves on.
 - Metadata in OracleVS comes back as VARCHAR2 string, not dict — skill *always* includes the JSON-parse monkeypatch from `OraDBVectorStore.py`. Non-negotiable; without it, downstream LangChain code silently breaks on filtered retrievals.
 - One DB, many collections — the skill enforces a naming convention (`<PROJECT>_<KIND>`, e.g. `WIKI_RAW_NOTES`) so users don't collide between projects.
@@ -281,7 +281,7 @@ These are the load-bearing docs. Each is a focused 50-200 line markdown file.
 | `oracle-26ai-free-docker.md` | The exact `docker-compose.yml`, ORACLE_PWD format, healthcheck, port 1521+5500, init-schema mounting, 120s startup wait. |
 | `oracledb-python.md` | `create_pool` pattern, acquire/release, `array.array("f", ...)` for vectors, common ORA codes, DSN formats. |
 | `langchain-oracledb.md` | OracleVS init, multi-collection pattern, the metadata-as-string monkeypatch. |
-| `oci-genai-openai.md` | Endpoint URL template, region matrix (Grok 4 → us-chicago-1, Cohere/Llama → all), API-key vs InstancePrincipal auth, OpenAI SDK base_url. |
+| `oci-genai-openai.md` | Endpoint URL template (`us-phoenix-1` default), bearer-token API-key recipe (canonical), SigV1/InstancePrincipal alternative, OpenAI SDK base_url. |
 | `ollama-local.md` | Install, `ollama pull`, default model picks, **Qwen thinking-mode workaround** (`OLLAMA_NUM_THREAD=1`, disable `<think>` in prompts). |
 | `onnx-in-db-embeddings.md` | HF → ONNX pipeline, BertTokenizer-only, opset ≤14, `DBMS_VECTOR.LOAD_ONNX_MODEL` registration, `VECTOR_EMBEDDING(text)` SQL. |
 | `ai-vector-search.md` | `VECTOR(dim, FLOAT32)`, COSINE/EUCLIDEAN/DOT, `CREATE VECTOR INDEX ... TARGET ACCURACY 95`, `FETCH APPROX FIRST K ROWS ONLY`. |

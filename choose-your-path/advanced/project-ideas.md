@@ -22,7 +22,7 @@ The skill maps free-text pitches to the closest of the three. If nothing maps, d
 | --- | --- |
 | DB | Oracle 26ai Free (via `skills/oracle-aidb-docker-setup`) |
 | Vector store | `OracleVS` with `InDBEmbeddings` (registered ONNX `MY_MINILM_V1`, 384 dim) |
-| LLM | OCI GenAI `grok-4` in `us-chicago-1` (SigV1 auth, Pattern 1) |
+| LLM | OCI GenAI `xai.grok-4` (bearer-token API key, OpenAI-compat endpoint at `us-phoenix-1`) |
 | Tools | `oracle-database-mcp-server` over stdio (`list_tables`, `describe_table`, `run_sql`, `vector_search`) |
 | Agent | LangChain tool-calling agent + `RunnableWithMessageHistory` |
 | UI | Open WebUI (`:3000`) → FastAPI adapter (`:8000`) |

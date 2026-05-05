@@ -59,7 +59,7 @@ This means:
 | Layer | Choice | Why |
 | --- | --- | --- |
 | DB | Oracle 26ai Free in Docker | Single command up; vector + relational + JSON in one place. |
-| LLM | OCI Generative AI Grok 4 (`us-chicago-1`, OpenAI-compat endpoint) - provided by us | Hosted, fast, no GPU on the laptop. *All three tiers* require this — there's no Ollama fallback in the active tiers anymore. |
+| LLM | OCI Generative AI `xai.grok-4` (`us-phoenix-1`, OpenAI-compat bearer-token endpoint) | Hosted, fast, no GPU on the laptop. Auth is a single `sk-...` API key (`OCI_GENAI_API_KEY`) — **no OCI tenancy / `~/.oci/config` / compartment OCID needed**. *All three tiers* require this. |
 | UI | Open WebUI (`:3000`) → FastAPI adapter (`:8000`) | Polished out of the box, OpenAI-compatible, drop-in for ChatGPT-style interaction. The adapter is the thinnest possible glue. |
 | Vector store | `langchain-oracledb` `OracleVS` | The library we're showcasing. |
 | Chat history | `OracleChatHistory` (custom subclass — `langchain-oracledb` doesn't ship one) | Survives kill / restart. |

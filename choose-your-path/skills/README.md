@@ -52,4 +52,4 @@ A fourth skill (`oci-genai-helper` for Grok 4 wiring) is on the table but curren
 
 - They don't pick which **idea** you're building. That's `beginner/`, `intermediate/`, or `advanced/`.
 - They don't write product code (the chat chain, the UI, the agent loop). That's the tier `SKILL.md`'s job.
-- They don't manage your OCI tenancy, secrets, or IAM. Bring your own `~/.oci/config`.
+- They don't manage your OCI account, secrets, or IAM. Bring your own `OCI_GENAI_API_KEY` (sk-... value from the OCI GenAI console).

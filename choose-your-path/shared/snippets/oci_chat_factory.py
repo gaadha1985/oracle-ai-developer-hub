@@ -1,36 +1,36 @@
-"""Direct OCI Generative AI chat client (canonical recipe).
+"""OCI Generative AI chat client (bearer-token recipe — no OCI config needed).
 
 WHY THIS RECIPE
 ---------------
-The OpenAI-compatible OCI Generative AI endpoint speaks the OpenAI wire format
-but is unstable across `openai` SDK versions. With `openai>=1.x`, the
-`oci-openai` shim raises `APIConnectionError` whose underlying cause is
-`AttributeError: 'URL' object has no attribute 'decode'` — `httpx.URL` reaches
-a `urllib.parse._decode_args` that expects a string. See friction P0-2.
+OCI now ships an API-key authentication path for the Generative AI service in
+us-phoenix-1: just a `Bearer sk-...` token against an OpenAI-compatible
+endpoint. Verified during the choose-your-path friction pass: returns Grok 4
+responses directly without `~/.oci/config`, without a tenancy, without
+compartment OCIDs, without the SigV1 ceremony.
 
-The direct OCI SDK path (`oci.generative_ai_inference`) is stable and
-recommended at all tiers of choose-your-path. It uses `GenericChatRequest` +
-`OnDemandServingMode` and SigV1 auth via `~/.oci/config` (or
-InstancePrincipals when running on OCI compute).
+The earlier OCI-SDK SigV1 path still works at us-chicago-1 if you have a
+tenancy; this snippet picks bearer-token-first because it removes the entire
+"OCI account prerequisite" from choose-your-path projects — an influencer can
+build a demo with just an API key, no signup flow.
 
 USAGE
 -----
-    client = get_chat_client()
     out = chat_complete([{"role": "user", "content": "Reply OK."}])
-    # `out` is a string (the assistant message text).
-
-The model id for Grok 4 is `xai.grok-4` (not `grok-4`). Pass via
-`OCI_LLM_MODEL` env var; default is `xai.grok-4`.
+    # `out` is the assistant message text.
 
 REQUIRED ENV
 ------------
-OCI_COMPARTMENT_ID    OCID of the compartment that has GenAI enabled.
-OCI_REGION            Defaults to us-chicago-1 (Grok 4 only ships there).
+OCI_GENAI_API_KEY     `sk-...` token from the OCI GenAI service console.
+                      NEVER commit this to git. Load from .env (which is
+                      gitignored) or your shell profile.
+OCI_GENAI_BASE_URL    Defaults to
+                      https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com
 OCI_LLM_MODEL         Defaults to xai.grok-4.
 
 DEPS
 ----
-oci>=2.130   (the only chat dep needed; `oci-openai` and `openai` are NOT used)
+openai>=1.40   (the only chat dep needed; `oci` and `oci-openai` are NOT
+                used on this path)
 """
 
 from __future__ import annotations
@@ -38,37 +38,38 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import oci
+from openai import OpenAI
 
 
 _chat_client: Any = None
 
 
-def get_chat_client() -> Any:
-    """Return an `oci.generative_ai_inference.GenerativeAiInferenceClient`
-    pinned to `OCI_REGION`. Module-scoped + cached. SigV1 via `~/.oci/config`,
-    InstancePrincipals if config is absent."""
+def get_chat_client() -> OpenAI:
+    """Return an OpenAI-shaped client pointing at the OCI GenAI OpenAI-compat
+    endpoint. Module-scoped + cached. Auth via `OCI_GENAI_API_KEY`."""
     global _chat_client
     if _chat_client is not None:
         return _chat_client
 
-    region = os.environ.get("OCI_REGION", "us-chicago-1")
-    try:
-        config = oci.config.from_file()
-        config["region"] = region
-    except Exception:
-        from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
-        signer = InstancePrincipalsSecurityTokenSigner()
-        endpoint = f"https://inference.generativeai.{region}.oci.oraclecloud.com"
-        _chat_client = oci.generative_ai_inference.GenerativeAiInferenceClient(
-            config={"region": region}, signer=signer, service_endpoint=endpoint
+    api_key = os.environ.get("OCI_GENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OCI_GENAI_API_KEY is required. Get one from the OCI Generative AI "
+            "service console and add it to your project's .env file (which "
+            "MUST be gitignored)."
         )
-        return _chat_client
 
-    endpoint = f"https://inference.generativeai.{region}.oci.oraclecloud.com"
-    _chat_client = oci.generative_ai_inference.GenerativeAiInferenceClient(
-        config=config, service_endpoint=endpoint
+    base_url = os.environ.get(
+        "OCI_GENAI_BASE_URL",
+        "https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com",
     )
+    # The endpoint accepts /v1/chat/completions; the OpenAI SDK appends
+    # /chat/completions automatically. So the configured base_url should
+    # end at `/v1`.
+    if not base_url.rstrip("/").endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+
+    _chat_client = OpenAI(base_url=base_url, api_key=api_key)
     return _chat_client
 
 
@@ -83,34 +84,10 @@ def chat_complete(
     if model_id == "grok-4":
         model_id = "xai.grok-4"
 
-    compartment_id = os.environ.get("OCI_COMPARTMENT_ID")
-    if not compartment_id:
-        raise RuntimeError(
-            "OCI_COMPARTMENT_ID is required for OCI Generative AI calls."
-        )
-
-    sdk_messages = []
-    for m in messages:
-        content = oci.generative_ai_inference.models.TextContent(text=m["content"])
-        sdk_messages.append(
-            oci.generative_ai_inference.models.Message(
-                role=m["role"].upper(), content=[content]
-            )
-        )
-
-    chat_request = oci.generative_ai_inference.models.GenericChatRequest(
-        api_format=oci.generative_ai_inference.models.BaseChatRequest.API_FORMAT_GENERIC,
-        messages=sdk_messages,
-        max_tokens=max_tokens,
+    resp = client.chat.completions.create(
+        model=model_id,
+        messages=messages,
         temperature=temperature,
+        max_tokens=max_tokens,
     )
-    chat_details = oci.generative_ai_inference.models.ChatDetails(
-        serving_mode=oci.generative_ai_inference.models.OnDemandServingMode(
-            model_id=model_id
-        ),
-        compartment_id=compartment_id,
-        chat_request=chat_request,
-    )
-
-    resp = client.chat(chat_details)
-    return resp.data.chat_response.choices[0].message.content[0].text
+    return resp.choices[0].message.content

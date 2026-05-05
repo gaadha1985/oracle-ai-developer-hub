@@ -1,16 +1,44 @@
 # OCI Generative AI — OpenAI-compatible endpoint
 
-For intermediate / advanced users who want hosted inference instead of local Ollama. Same `OpenAI`-shaped Python client, different `base_url` and auth.
+All three choose-your-path tiers use the OCI GenAI service for chat. Same `OpenAI`-shaped Python client, different `base_url` and auth.
 
-## Endpoint shape
+## Recommended path: bearer-token API key (no OCI tenancy needed)
 
 ```
-base_url = "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai"
+base_url = "https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com/v1"
+api_key  = "sk-..."   # generated in the OCI Generative AI service console
+model    = "xai.grok-4"
 ```
 
-The endpoint speaks the OpenAI wire format **but does not accept a bearer-token `api_key`** — every request must be signed with OCI Signature V1. `from openai import OpenAI; OpenAI(api_key="oci")` returns 401.
+```python
+from openai import OpenAI
+import os
 
-Use one of the two patterns below.
+client = OpenAI(
+    base_url=os.environ.get(
+        "OCI_GENAI_BASE_URL",
+        "https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com",
+    ).rstrip("/").rstrip("/v1") + "/v1",
+    api_key=os.environ["OCI_GENAI_API_KEY"],
+)
+resp = client.chat.completions.create(
+    model="xai.grok-4",
+    messages=[{"role": "user", "content": "Reply OK."}],
+    max_tokens=10,
+)
+print(resp.choices[0].message.content)  # -> "OK"
+```
+
+Why this is the canonical recipe:
+- **No OCI tenancy required.** No `~/.oci/config`, no compartment OCID, no SigV1 ceremony. An influencer can ship a demo with just an API key.
+- **Stable across `openai` SDK versions.** The earlier `oci-openai` shim broke against `openai>=1.x` (httpx.URL vs string mismatch); the bearer path uses the upstream `openai` client directly.
+- **Same wire format as OpenAI.** `client.chat.completions.create(...)` works identically; only `base_url` and `api_key` differ.
+
+**`OCI_GENAI_API_KEY` is a secret** — never commit it. The `.env` template at `shared/templates/env.example` has a placeholder; `.env` itself is in `.gitignore`.
+
+## Alternative path: SigV1 via `oci` SDK (when bearer auth isn't an option)
+
+Some tenancies / regions require Signature V1 auth via `~/.oci/config`. Use this only when bearer-token API keys aren't available — it's significantly more setup.
 
 ### Pattern 1: `oci-openai` SDK (the right way)
 

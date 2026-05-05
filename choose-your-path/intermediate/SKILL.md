@@ -29,11 +29,10 @@ The user picked the **intermediate** path. They've built RAG and chatbots before
 Run `shared/interview.md`. For intermediate specifically:
 
 - **Q3 (DB target)** — default to local Docker. Allow "already-running container" if user says so.
-- **Q4 (Inference)** — *not optional at this tier*. **OCI GenAI** for the LLM (`grok-4` in `us-chicago-1`, Pattern 1 SigV1). **In-DB ONNX** for embeddings. Confirm:
-  - `~/.oci/config` exists; if not, stop and point at `oci setup config`.
-  - `OCI_COMPARTMENT_ID` available.
-  - Region warning if not `us-chicago-1`; offer Cohere or Llama as same-region fallback per `oci-genai-openai.md`.
-  - **In-DB ONNX model:** default = `sentence-transformers/all-MiniLM-L6-v2`, registered as `MY_MINILM_V1` (384 dim). The user does *not* need to download this themselves — the skill scaffolds the export-and-register pipeline (steps 1-3 in `onnx-in-db-embeddings.md`).
+- **Q4 (Inference)** — *not optional at this tier*. **OCI GenAI** for the LLM (`xai.grok-4` via the OpenAI-compat bearer-token endpoint at `us-phoenix-1`). **In-DB ONNX** for embeddings. Confirm:
+  - `OCI_GENAI_API_KEY` (a `sk-...` value) is set or about to be added to project `.env`. If absent, stop and ask the user to generate one in the OCI GenAI service console. **No `~/.oci/config` / no compartment OCID needed.**
+  - Default endpoint is `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com`; override via `OCI_GENAI_BASE_URL`.
+  - **In-DB ONNX model:** default = `sentence-transformers/all-MiniLM-L6-v2`, registered as `MY_MINILM_V1` (384 dim). The user does *not* need to download this themselves — the skill scaffolds via `onnx2oracle` CLI (one command).
 - **Q5 (Topic)** — one of the three from `intermediate/project-ideas.md`. Map free-text pitches; default to idea 1 (NL2SQL).
 - **Q6 (Notebook)** — default **yes**.
 - **Q7 (intermediate-only) — sql_mode for MCP?** — `read_only` (default — covers all three idea shapes safely) or `read_write`. Idea 1 and idea 2 are read-only. Idea 3 can be either. Capture an explicit `y` if `read_write` selected.
@@ -88,7 +87,7 @@ Order matters: building-block skills first, then project code.
 
 10. `target_dir/.gitignore` — extend with `data/`, `INVOICE_PDFS/`, `*.onnx`, `scripts/__pycache__/`.
 11. `target_dir/pyproject.toml` — extend deps:
-    - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `oci>=2.130`, `onnx2oracle`, `Faker>=24`, `python-multipart`.
+    - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `openai>=1.40`, `onnx2oracle`, `Faker>=24`, `python-multipart`.
     - Idea 1: + (no extras).
     - Idea 2: + (no extras).
     - Idea 3: + `reportlab>=4`, `pypdf>=4`.

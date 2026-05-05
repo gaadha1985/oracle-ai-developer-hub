@@ -67,10 +67,8 @@ The new (post-restructure) skill set requires:
 
 1. **Docker** — verify `docker --version` works.
 2. **Python 3.11+** — verify `python --version`.
-3. **OCI tenancy with `~/.oci/config`** — *all three tiers* now require this. Grok 4 lives at `inference.generativeai.us-chicago-1.oci.oraclecloud.com`. If the user has no OCI config:
-   - Ask if they want to do `oci setup config` first (yes → stop here, point them at the OCI docs).
-   - If no — tell them this skill set needs OCI for the LLM and stop. Earlier tiers had Ollama fallback; that's been moved to `archive/` ideas.
-4. **`OCI_COMPARTMENT_ID`** — capture from env if set, otherwise prompt.
+3. **OCI Generative AI API key** — `OCI_GENAI_API_KEY` (a `sk-...` bearer token, generated in the OCI GenAI service console). All three tiers require this; auth is bearer-token over OpenAI-compatible HTTP, NOT SigV1, so the user does NOT need `~/.oci/config` or a compartment OCID. Default endpoint is `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com`. If the user has no API key, ask them to generate one and stop.
+4. **`OCI_GENAI_API_KEY` must NEVER be committed** — `.env` is in `.gitignore`. Confirm before writing any project files that reference it.
 
 These prerequisites apply to every tier. Don't re-ask them inside each path.
 

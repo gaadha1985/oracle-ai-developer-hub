@@ -25,7 +25,7 @@ The user picked the **advanced** path. Two non-negotiable rules at this tier:
 Run `shared/interview.md` plus the advanced-only questions.
 
 - **Q3 (DB target)** — local Docker default.
-- **Q4 (Inference)** — *not optional*. **OCI GenAI** for chat (`grok-4` in `us-chicago-1`, Pattern 1 SigV1 auth). **In-DB ONNX** for embeddings (`MY_MINILM_V1`, 384 dim). The skill scaffolds the export/register pipeline.
+- **Q4 (Inference)** — *not optional*. **OCI GenAI** for chat (`xai.grok-4` via the OpenAI-compat bearer-token endpoint at `us-phoenix-1`; `OCI_GENAI_API_KEY` only — no `~/.oci/config` needed). **In-DB ONNX** for embeddings (`MY_MINILM_V1`, 384 dim) registered via `onnx2oracle` CLI.
 - **Q5 (Topic)** — one of three from `advanced/project-ideas.md`. Map free-text pitches; default to idea 1 (NL2SQL + doc-RAG hybrid analyst).
 - **Q6 (Notebook)** — yes, **mandatory**. Reject "no" — advanced is where notebook payoff lives.
 - **Q7 (advanced-only) — sql_mode for MCP?** — `read_only` (default; ideas 1 + 2). **Idea 3 (conversational schema designer) requires `read_write`** and an explicit confirmation captured in writing — surface in the README as a callout.

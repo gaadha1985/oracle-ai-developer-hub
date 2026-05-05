@@ -27,13 +27,12 @@ You may not write SQL, embedder calls, or table-creation code that contradicts t
 Run the questions from `shared/interview.md`. For beginner specifically:
 
 - **Q3 (DB target)** — default to "Local Docker" without re-asking.
-- **Q4 (Inference)** — *not optional anymore at this tier*. **OCI Generative AI** for the LLM (Grok 4). **MiniLM Python-side** for embeddings. Verify:
-  - `~/.oci/config` exists. If not, stop and tell the user to run `oci setup config`.
-  - `OCI_COMPARTMENT_ID` is in env or capture it now.
+- **Q4 (Inference)** — *not optional anymore at this tier*. **OCI Generative AI** for the LLM (Grok 4 via bearer-token). **MiniLM Python-side** for embeddings. Verify:
+  - `OCI_GENAI_API_KEY` (a `sk-...` value) is set in the user's shell env OR about to be written into the project's `.env`. If neither, stop and ask the user to generate one in the OCI GenAI service console.
   - The user is OK with non-zero OCI cost (mention this once — Grok 4 is not on the always-free list).
-  - Region: warn if not `us-chicago-1` (Grok 4 only ships there). If the user is elsewhere, offer `cohere.command-r-plus` as a same-region fallback.
+  - Default endpoint is `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com`; the user can override via `OCI_GENAI_BASE_URL` if their key is region-locked elsewhere.
   - Embedder: `sentence-transformers/all-MiniLM-L6-v2` (384 dim) by default — runs inside the user's Python process via `HuggingFaceEmbeddings`. Same model that intermediate/advanced register inside Oracle, so corpus + chunks stay comparable across tiers.
-  - Chat: `grok-4`.
+  - Chat: `xai.grok-4` (full id required — `grok-4` alone won't resolve).
 - **Q5 (Topic)** — pick one of the three from `beginner/project-ideas.md`. Map free-text pitches to the closest. If none fits, default to **idea 1 (PDFs)** and tell the user why.
 - **Q6 (Notebook)** — default **no**. Beginner ships the chat UI, not a notebook walkthrough.
 
@@ -90,18 +89,19 @@ Order matters — invocation of building-block skills happens **before** project
 
 5. `target_dir/.gitignore` — extend with `data/`, `*.pdf`, `notes/`.
 6. `target_dir/pyproject.toml` — extend deps:
-   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `oci>=2.130`, `langchain-huggingface>=0.1`, `sentence-transformers>=2.7`.
+   - Always: `fastapi>=0.110`, `uvicorn[standard]>=0.27`, `langchain-core>=0.3`, `langchain-community>=0.3`, `openai>=1.40`, `langchain-huggingface>=0.1`, `sentence-transformers>=2.7`.
    - Idea 1 (PDFs): + `pypdf>=4`.
    - Idea 2 (Markdown): + `markdown-it-py>=3`.
    - Idea 3 (Web): + `trafilatura>=1.10`, `httpx>=0.27`.
    - **Do NOT add** `oci-openai` or `openai` — friction P0-2; the OpenAI-compat path is unstable. The chat factory at `shared/snippets/oci_chat_factory.py` uses the direct OCI SDK.
 7. `target_dir/.env.example` — append:
    ```
-   OCI_COMPARTMENT_ID=
-   OCI_GENAI_BASE_URL=https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20231130/actions/openai
-   OCI_LLM_MODEL=grok-4
+   OCI_GENAI_API_KEY=replace_me_sk_value_from_oci_genai_console
+   OCI_GENAI_BASE_URL=https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com
+   OCI_LLM_MODEL=xai.grok-4
    EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
    ```
+   Confirm `target_dir/.gitignore` contains `.env` (the docker-setup skill adds it). **Never commit `OCI_GENAI_API_KEY`.**
 8. `src/<package_slug>/inference.py` — copy `shared/snippets/oci_chat_factory.py` (chat — uses the direct OCI SDK, model id `xai.grok-4`). For the embedder, write a tiny factory:
    ```python
    from langchain_huggingface import HuggingFaceEmbeddings

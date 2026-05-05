@@ -38,19 +38,18 @@ For v1 the skill only fully supports option 1. Option 2 = the user has done the 
 ## Q4 — Inference
 
 > **What should generate text and embeddings?**
-> All three tiers use **OCI Generative AI** for the LLM (`grok-4` in `us-chicago-1`, OpenAI-compatible endpoint, Pattern 1 SigV1 auth). What differs is the embedder:
+> All three tiers use **OCI Generative AI** for the LLM (`xai.grok-4` via the OpenAI-compatible bearer-token endpoint at `us-phoenix-1`). What differs is the embedder:
 >   - **beginner** → `sentence-transformers/all-MiniLM-L6-v2` (384 dim) running Python-side via `HuggingFaceEmbeddings`.
 >   - **intermediate / advanced** → the *same* MiniLM model, but registered inside Oracle (`MY_MINILM_V1`) and called via `VECTOR_EMBEDDING(MODEL USING text)` — no external embedder process, no Python embedder loop.
 >
-> *Why: this picks the embedder dim, the chat client, and which env vars get filled in. All three tiers require `~/.oci/config` or instance principal.*
+> *Why: this picks the embedder dim, the chat client, and which env vars get filled in. All three tiers require `OCI_GENAI_API_KEY` — a `sk-...` bearer token from the OCI GenAI service console. **No OCI tenancy / `~/.oci/config` / compartment OCID is needed**.*
 
 The skill confirms:
-- `~/.oci/config` exists (or instance principal env vars present).
-- `OCI_COMPARTMENT_ID` is captured.
+- `OCI_GENAI_API_KEY` is set (in shell env or about to be added to project `.env`).
 - The user is OK with non-zero OCI cost (Grok 4 is not on the always-free list).
-- Region is `us-chicago-1` (warn + offer Cohere/Llama same-region fallback if not).
+- Default endpoint is `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com`; override via `OCI_GENAI_BASE_URL` if needed.
 
-Older versions of this interview offered Ollama and BYO endpoints. Those flows live in `archive/` ideas; the active tiers don't surface them.
+Older versions of this interview offered Ollama and BYO endpoints — those flows live in `archive/` ideas. The previous SigV1 / `~/.oci/config` path is also archived; the active tiers use the simpler bearer-token API key flow because it removes the entire OCI tenancy prerequisite (an influencer can ship a demo with just an API key, no signup ceremony).
 
 ## Q5 — Project topic
 
@@ -78,9 +77,9 @@ About to scaffold:
   path:        intermediate
   target_dir:  ./nl2sql-explorer  (resolved to absolute path before scaffolding)
   database:    local docker (26ai Free)
-  inference:   OCI GenAI Grok 4 (us-chicago-1)
+  inference:   OCI GenAI xai.grok-4 (us-phoenix-1, bearer-token API key)
                + in-DB ONNX embeddings (MY_MINILM_V1, 384d)
-  mcp:         oracle-database-mcp-server (read_only)
+  mcp:         local LangChain BaseTool subclasses (read_only)
   project:     NL2SQL data explorer
   notebook:    yes
   references:  shared/references/{langchain-oracledb,oci-genai-openai,onnx-in-db-embeddings,...}.md
@@ -94,7 +93,7 @@ The skill does **not** scaffold without an explicit `y`. For advanced idea 3 (co
 
 The interview halts (and the skill exits with a status message, not a half-built project) if:
 - The user says they want a database other than Oracle.
-- The user has no OCI tenancy / `~/.oci/config` and won't set one up.
+- The user has no `OCI_GENAI_API_KEY` and won't generate one.
 - The user picks an embedder/dim the skill can't validate against `OracleVS`.
 - The user wants a language other than Python (out of scope v1 — point them at the plan).
 - The target dir is non-empty and the user declines overwrite.

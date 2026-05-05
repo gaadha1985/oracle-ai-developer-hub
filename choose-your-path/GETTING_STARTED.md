@@ -8,21 +8,16 @@ The post-restructure skill set is **OCI-Generative-AI-only** for the LLM (Grok 4
 
 ## Once-only setup (do this before any walk-through)
 
-Five things on your machine:
+Four things on your machine:
 
 1. **Docker** — to run Oracle 26ai Free locally. Verify: `docker --version`.
 2. **Python 3.11+** with `conda` (or `venv`). Verify: `python --version`.
-3. **OCI tenancy + `~/.oci/config`.** If you've never done this:
+3. **OCI Generative AI API key.** Generate one in the OCI Generative AI service console (it's a `sk-...` value). Add to your shell rc:
    ```bash
-   pip install oci-cli
-   oci setup config
+   export OCI_GENAI_API_KEY=sk-...
    ```
-   Walk the prompts. You'll need your user OCID, tenancy OCID, region, a fingerprint of an API key. The CLI walks you through key generation if you don't have one.
-4. **`OCI_COMPARTMENT_ID`** in your environment. Find it in the OCI console under Identity → Compartments. Add to your shell rc:
-   ```bash
-   export OCI_COMPARTMENT_ID=ocid1.compartment.oc1..xxxx
-   ```
-5. **The developer-hub repo cloned somewhere.** The walk-throughs reference `SKILL.md` files inside it. Pick a path you'll remember:
+   The bearer-token path means **no OCI tenancy / `~/.oci/config` / compartment OCID is needed**. The key alone is enough to call Grok 4. **Never commit this value to git** — `.env` files are in `.gitignore`.
+4. **The developer-hub repo cloned somewhere.** The walk-throughs reference `SKILL.md` files inside it. Pick a path you'll remember:
    ```bash
    git clone https://github.com/oracle-devrel/oracle-ai-developer-hub.git
    export HUB=$(pwd)/oracle-ai-developer-hub                  # or wherever you put it
@@ -61,7 +56,7 @@ Claude reads the top-level router, then asks "which path?" — answer `1` (begin
 | Q1 — Path | `beginner` (already answered above) |
 | Q2 — Target dir | `.` (current directory) |
 | Q3 — Database | `local Docker` |
-| Q4 — Inference | OCI GenAI for the LLM (Grok 4). Confirm `~/.oci/config` exists, `OCI_COMPARTMENT_ID` is set, you're OK with non-zero OCI cost. Region default `us-chicago-1`. Embedder default = `sentence-transformers/all-MiniLM-L6-v2` (Python-side, 384 dim — ~90MB downloaded once on first run). Same model intermediate/advanced register inside Oracle. |
+| Q4 — Inference | OCI GenAI for the LLM (`xai.grok-4`). Confirm `OCI_GENAI_API_KEY` is set in your shell or about to land in project `.env`, you're OK with non-zero OCI cost. Default endpoint `https://inference.generativeai.us-phoenix-1.oci.oraclecloud.com`. Embedder default = `sentence-transformers/all-MiniLM-L6-v2` (Python-side, 384 dim — ~90MB downloaded once on first run). Same model intermediate/advanced register inside Oracle. |
 | Q5 — Topic | `1` (PDFs) |
 | Q6 — Notebook | `no` (beginner default) |
 
@@ -81,7 +76,7 @@ The compose file gets the **Open WebUI** service appended. ~3-5 minutes total.
 ### 5. Bring up the stack
 
 ```bash
-cp .env.example .env                           # set OCI_COMPARTMENT_ID etc.
+cp .env.example .env                           # set OCI_GENAI_API_KEY (NEVER commit)
 docker compose up -d                           # Oracle + Open WebUI
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
@@ -131,7 +126,7 @@ Answer `2` (intermediate) at the dispatch.
 | Q1 — Path | `intermediate` |
 | Q2 — Target dir | `.` |
 | Q3 — Database | `local Docker` |
-| Q4 — Inference | OCI GenAI for Grok 4. **Embeddings = in-DB ONNX** (`MY_MINILM_V1`, 384 dim). Confirm `us-chicago-1` region. |
+| Q4 — Inference | OCI GenAI for Grok 4 (`xai.grok-4`, bearer-token). **Embeddings = in-DB ONNX** (`MY_MINILM_V1`, 384 dim) registered via `onnx2oracle` CLI. Default endpoint `us-phoenix-1`. |
 | Q5 — Topic | `1` (NL2SQL data explorer) |
 | Q6 — Notebook | `yes` (intermediate default) |
 | Q7 — sql_mode | `read_only` (idea 1 default) |
@@ -274,7 +269,7 @@ jupyter lab notebook.ipynb
 | `verify: FAIL — connect: ORA-01017` | Wrong password. `.env` `ORACLE_PWD` must match what's in `docker-compose.yml`. The skill generates it; don't edit by hand. |
 | `pip install -e .` fails with "no `[build-system]`" | Old scaffold. Re-run the skill. |
 | Citation strings come back as raw JSON like `'{"filename": ...}'` | Metadata-as-string monkeypatch missing import. Verify `src/<pkg>/_monkeypatch.py` exists and is imported at the top of `store.py`. |
-| OCI returns 401 | Endpoint needs Signature V1, not bearer. Make sure `oci-openai>=0.1` is in deps and `inference.py` uses Pattern 1 (`oci.signer.Signer`), not bare `OpenAI(api_key="...")`. Also: `OCI_GENAI_BASE_URL` and `OCI_COMPARTMENT_ID` set in `.env`, `~/.oci/config` exists. |
+| OCI returns 401 | `OCI_GENAI_API_KEY` is missing, mistyped, or expired. Re-check the value in `.env` against the OCI GenAI service console. The endpoint is `us-phoenix-1`; if your key is region-locked elsewhere, override `OCI_GENAI_BASE_URL`. |
 | ONNX `LOAD_ONNX_MODEL` fails | The model uses a SentencePiece tokenizer (T5, XLM-R, MPNet variants). Pick a Bert-family model — `all-MiniLM-L6-v2` is the safe default. |
 | `VECTOR_EMBEDDING` returns wrong dim | Drop the model: `BEGIN DBMS_VECTOR.DROP_ONNX_MODEL('MY_MINILM_V1'); END;` then re-run the export. |
 | MCP server hangs at startup | Check `oracle-database-mcp-server` is on PATH after `pip install -e .`. The MCP server inherits `DB_DSN`/`DB_USER`/`DB_PASSWORD` from env — verify those are exported. |
@@ -313,7 +308,7 @@ The skill asks its own inputs, runs its own steps, and reports back. Useful when
      - notebook:    no (beginner) | yes (intermediate) | yes mandatory (advanced)
      - sql_mode:    read_only (intermediate, advanced 1+2) | read_write (advanced 3, requires explicit y)
      - demo_focus:  polished_ui | deep_dive | both (advanced only)
-4. cp .env.example .env  # set OCI_COMPARTMENT_ID
+4. cp .env.example .env  # set OCI_GENAI_API_KEY (NEVER commit)
 5. docker compose up -d
 6. python -m venv .venv && source .venv/bin/activate && pip install -e .
 7. python verify.py        → expect: verify: OK
