@@ -28,6 +28,27 @@ You wire MCP. You do not write the agent loop, the chain, or the UI — those ar
 - A working `store.py` exists at `target_dir/src/<package_slug>/store.py` (langchain-oracledb-helper output). If not, stop — order matters.
 - `sql_mode == "read_write"` requires the user to confirm explicitly during interview. Refuse to proceed silently — destructive SQL via an LLM agent is a footgun.
 
+> Several directives below are adapted from Oracle's official SQLcl MCP skill (`oracle/skills` · `db/sqlcl/sqlcl-mcp-server.md`). Kept as guidance, not code-path swaps.
+
+### If SQLcl 25.2+ is on PATH
+
+`sql -mcp` (Oracle's first-party MCP server) ships in SQLcl 25.2 and later. Detect with `sql -V`. When present, the workshop attendee has the *option* of swapping our local-tool layer for the SQLcl transport — surface this as a note in the project README, do not auto-switch. Tool surface aligns 1:1 on `list_tables`, `describe_table`, `run_sql`; SQLcl exposes `run-sqlcl` (DDL/LOAD/Liquibase) which is out of scope for this scaffold; SQLcl does NOT expose `vector_search`, so our local `VectorSearchTool` stays project-local in either transport. Restrict levels (`-R 0..4`) and the `-savepwd` connection store are SQLcl-only and not replicated here.
+
+### Recommended DB user shape
+
+Workshop attendees default to running as the schema owner. Recommend (don't enforce) a least-privilege user instead — same posture as SQLcl's `mcp_reader` example:
+
+```sql
+CREATE USER cyp_mcp IDENTIFIED BY "<strong>";
+GRANT CREATE SESSION TO cyp_mcp;
+GRANT SELECT ANY DICTIONARY TO cyp_mcp;            -- schema introspection
+GRANT SELECT ON owner.your_table TO cyp_mcp;       -- per-table reads
+-- For the advanced schema-designer idea (sql_mode=read_write) only:
+-- GRANT CREATE TABLE, CREATE VIEW TO cyp_mcp;
+```
+
+Surface this in the project README. Don't run the DDL automatically — the user should pick when to harden their setup.
+
 ## Step 2 — Add deps
 
 > **Friction P0-1:** the previous version of this skill named `oracle-database-mcp-server` as a pip dependency. That package does NOT exist on PyPI. Until a canonical Oracle MCP server is published, this skill scaffolds a **local in-process tool layer** that exposes the same surface (`list_tables`, `describe_table`, `run_sql`, `vector_search`) as `langchain_core.tools.BaseTool` subclasses calling `oracledb.Cursor` directly. The agent gets the same typed contract — there's just no out-of-process MCP server.
@@ -132,16 +153,35 @@ class RunSQLTool(BaseTool):
     )
 
     def _run(self, sql: str) -> str:  # type: ignore[override]
+        # Strip leading SQL comments + whitespace before keyword-matching, so
+        # `/* foo */ DROP TABLE x` can't slip past a startswith() check.
+        stripped = sql.lstrip()
+        while stripped.startswith("--") or stripped.startswith("/*"):
+            if stripped.startswith("--"):
+                _, _, stripped = stripped.partition("\n")
+            else:
+                _, _, stripped = stripped.partition("*/")
+            stripped = stripped.lstrip()
+        first = stripped.lower().split(None, 1)[0] if stripped else ""
+
         if _readonly_mode():
-            stripped = sql.lstrip().lower()
-            if not (stripped.startswith("select") or stripped.startswith("with")):
+            # Allow only true read shapes. EXPLAIN can mutate via PLAN_TABLE side
+            # effects; CALL / BEGIN / DECLARE can wrap arbitrary PL/SQL — reject.
+            if first not in ("select", "with"):
                 return (
-                    "[run_sql refused — read_only mode rejects mutating SQL. "
+                    "[run_sql refused — read_only mode rejects mutating SQL "
+                    f"(leading keyword: {first!r}). "
                     "Set ORACLE_MCP_SQL_MODE=read_write to enable.]"
                 )
+
+        # AWR / V$SQL traceability — same shape SQLcl's MCP server uses natively.
+        # Lets a DBA grep V$SQL for agent-issued statements.
+        model = os.environ.get("CYP_LLM_MODEL", "grok-4")
+        tagged_sql = f"/* LLM in use is {model} */ {sql}"
+
         conn = get_connection()
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(tagged_sql)
             cols = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchall() if cols else []
         return repr({"columns": cols, "rows": [list(r) for r in rows]})
@@ -191,6 +231,55 @@ Notes for the tier skill that uses this:
 - Tools come back as `langchain_core.tools.BaseTool` subclasses. Bind them to the LLM via `llm.bind_tools(list_tools())` — no manual `@tool` decoration needed.
 - Wrap `RunSQLTool` with `shared/snippets/sqlcl_tee.py` if you want a SQLcl-tee log per query (intermediate tier folds this in by default).
 - When a real `oracle-database-mcp-server` appears on PyPI, swap `list_tools()`'s body for an MCP-stdio session; the tool surface is unchanged so callers don't break.
+
+## Step 4.5 — Tag agent sessions in V$SESSION
+
+Add two lines to `langchain-oracledb-helper`'s `get_connection()` so DBAs can spot agent-issued sessions in real time (`SELECT module, action FROM v$session`). Adapted from SQLcl's MCP server, which sets these natively:
+
+```python
+import os
+# inside get_connection(), after oracledb.connect(...):
+with conn.cursor() as cur:
+    cur.callproc(
+        "dbms_application_info.set_module",
+        [os.environ.get("CYP_MCP_CLIENT", "cyp-agent"),
+         os.environ.get("CYP_LLM_MODEL", "grok-4")],
+    )
+```
+
+If `langchain-oracledb-helper` already shipped `get_connection()`, add this in `target_dir/src/<package_slug>/store.py` next to the existing `oracledb.connect(...)` call rather than monkeypatching.
+
+## Step 4.6 — Optional CYP_MCP_LOG audit table
+
+Same shape as SQLcl's `DBTOOLS$MCP_LOG`, but works for the local-tool transport. Scaffold this only if the tier skill or the user asks for it (the advanced tier's idea-3 schema designer is the obvious candidate). Skip by default for tier-2 demos.
+
+```sql
+-- One-time DDL, runs on first connection if missing:
+CREATE TABLE IF NOT EXISTS CYP_MCP_LOG (
+  id           NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ts           TIMESTAMP DEFAULT SYSTIMESTAMP,
+  mcp_client   VARCHAR2(100),
+  model        VARCHAR2(100),
+  tool_name    VARCHAR2(100),
+  log_message  CLOB
+);
+```
+
+Then in `RunSQLTool._run`, after `cur.execute(tagged_sql)`, insert one row per call:
+
+```python
+cur.execute(
+    "INSERT INTO CYP_MCP_LOG (mcp_client, model, tool_name, log_message) "
+    "VALUES (:c, :m, :t, :l)",
+    c=os.environ.get("CYP_MCP_CLIENT", "cyp-agent"),
+    m=os.environ.get("CYP_LLM_MODEL", "grok-4"),
+    t="run_sql",
+    l=sql[:4000],
+)
+conn.commit()
+```
+
+Gives the workshop attendee a real audit trail without the SQLcl dependency. ~15 LOC. When transport later switches to `sql -mcp`, drop this table — `DBTOOLS$MCP_LOG` takes over.
 
 ## Step 5 — Write `tool_registry.py`
 

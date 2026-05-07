@@ -132,6 +132,8 @@ Order matters: building-block skills first, then project code.
     - In `src/<package_slug>/tool_registry.py`, import `from shared.snippets.sqlcl_tee import wrap_with_sqlcl_tee` and wrap the `run_sql` tool that comes back from `mcp_client.list_tools()`.
     - Document SQLcl install in the project's README (link to `shared/references/sqlcl-tee.md`).
     - Why MCP+SQLcl: MCP shows the SQL the agent emits; SQLcl shows what the DB actually did (rows, errors, plan). Together you can debug an agent turn end-to-end.
+    - **Observability inherited from `oracle-mcp-server-helper` Steps 4.5+4.6:** every `run_sql` call goes out tagged `/* LLM in use is <model> */`, sessions populate `V$SESSION.MODULE`/`ACTION`, and (if the user opts in) one row is inserted into `CYP_MCP_LOG` per call. README should mention the three diagnostic queries: `SELECT module, action FROM v$session`, `SELECT * FROM v$sql WHERE sql_text LIKE '/* LLM in use is %'`, and `SELECT * FROM CYP_MCP_LOG ORDER BY ts DESC FETCH FIRST 20 ROWS ONLY`.
+    - **If the user has SQLcl 25.2+:** mention in the README that `sql -mcp` is a drop-in alternative for the local-tool transport (Oracle's first-party MCP server, ships with `DBTOOLS$MCP_LOG` natively). Do not auto-switch — the local-tool scaffold remains the workshop default for portability.
 15. `verify.py` — fill template:
     - Round-trip: `len(get_embedder().embed_query("dim check")) == 384`.
     - Smoke: query the registered ONNX model directly via SQL.
