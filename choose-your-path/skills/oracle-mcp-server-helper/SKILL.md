@@ -232,6 +232,30 @@ Notes for the tier skill that uses this:
 - Wrap `RunSQLTool` with `shared/snippets/sqlcl_tee.py` if you want a SQLcl-tee log per query (intermediate tier folds this in by default).
 - When a real `oracle-database-mcp-server` appears on PyPI, swap `list_tools()`'s body for an MCP-stdio session; the tool surface is unchanged so callers don't break.
 
+**Friction P1-render-cell (run-3):** If your tier rewrites `RunSQLTool._run` to format rows as **tab-separated text** (intermediate / advanced both do this for human-readable demo output) instead of the snippet's `repr({"columns": ..., "rows": ...})` shape, the snippet does NOT ship a per-cell renderer. Two failure modes if you forget:
+1. `NameError: name '_render_cell' is not defined` on every `run_sql` call (intermediate-nl2sql included the helper; advanced-hybrid-analyst dropped it during the clone — every data-route question failed end-to-end until added).
+2. CLOB/BLOB columns render as `<oracledb.LOB object at 0x…>` because `str(<lob>)` doesn't materialize the value.
+
+Either keep the snippet's JSON-repr return shape, or paste this stanza immediately above your `RunSQLTool`:
+
+```python
+def _render_cell(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "read"):
+        try:
+            value = value.read()
+        except Exception:
+            return repr(value)
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = value.decode("utf-8", errors="replace")
+        except Exception:
+            return repr(value)
+    text = str(value).replace("\t", " ").replace("\n", " ")
+    return text if len(text) <= 200 else text[:200] + "…"
+```
+
 ## Step 4.5 — Tag agent sessions in V$SESSION
 
 Add two lines to `langchain-oracledb-helper`'s `get_connection()` so DBAs can spot agent-issued sessions in real time (`SELECT module, action FROM v$session`). Adapted from SQLcl's MCP server, which sets these natively:
