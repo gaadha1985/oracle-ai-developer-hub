@@ -33,9 +33,18 @@ services:
       # against FREEPDB1, alphabetically. Used by some skills for seed data.
       - ./init-schema:/opt/oracle/scripts/startup:ro
     healthcheck:
-      # `sqlplus -L` returns 0 only when the DB is accepting connections.
-      # The `-L` (no-prompt) flag is what makes this safe in a healthcheck.
-      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -L SYSTEM/${ORACLE_PWD}@localhost:1521/FREEPDB1 | grep -q '1'"]
+      # Use the image's own status script. It returns 0 only when the DB is
+      # actually OPEN — no string matching against sqlplus output.
+      #
+      # The earlier `echo 'SELECT 1 FROM DUAL;' | sqlplus -L ... | grep -q '1'`
+      # check false-positives: when the container starts under the wrong arch
+      # (amd64 layers on an arm64 host, or vice-versa), `su oracle` inside the
+      # entrypoint fails with "Authentication failure", no Oracle processes
+      # ever start, and sqlplus returns an ORA-01034 banner that contains the
+      # digit `1`. The grep matched the error text, compose reported the
+      # container HEALTHY, and the user only discovered the DB was dead when
+      # the first oracledb.connect() failed minutes later.
+      test: ["CMD-SHELL", "/opt/oracle/checkDBStatus.sh"]
       interval: 15s
       timeout: 10s
       retries: 20

@@ -79,6 +79,30 @@ DB_DSN=localhost:<port>/FREEPDB1
 
 Don't commit `.env`. The skill confirms `target_dir/.gitignore` contains `.env` — adds the line if missing.
 
+## Step 3b — Pull the image for the host's native arch (load-bearing on Apple Silicon)
+
+Before `docker compose up`, check the host arch and force a native-arch pull. The Oracle 26ai Free image is multi-arch, but Docker's manifest auto-resolution is unreliable when a stale image is on disk or the host VM is degraded — most commonly amd64 layers end up on an arm64 Mac. Under emulation the entrypoint's `su oracle` step silently fails with "Authentication failure", no Oracle processes ever start, and the old `sqlplus | grep '1'` healthcheck false-positives on the ORA-01034 error text (the new `/opt/oracle/checkDBStatus.sh` check catches it, but pulling the right image up front avoids the whole detour).
+
+```bash
+HOST_ARCH=$(uname -m)
+case "$HOST_ARCH" in
+  x86_64)         PLATFORM=linux/amd64 ;;
+  arm64|aarch64)  PLATFORM=linux/arm64 ;;
+  *)              echo "unsupported host arch: $HOST_ARCH"; exit 1 ;;
+esac
+
+EXISTING=$(docker image inspect container-registry.oracle.com/database/free:latest \
+             --format '{{.Architecture}}' 2>/dev/null || true)
+if [ -n "$EXISTING" ] && [ "$EXISTING" != "${PLATFORM##*/}" ]; then
+  echo "stale $EXISTING image on disk; re-pulling for $PLATFORM"
+  docker rmi container-registry.oracle.com/database/free:latest
+fi
+
+docker pull --platform "$PLATFORM" container-registry.oracle.com/database/free:latest
+```
+
+On amd64 Linux hosts the inspect matches and the `docker pull` is a no-op cache hit. The cost is one extra command; the saving is the user not spending an hour on "the container is healthy but I can't connect" on a Mac.
+
 ## Step 4 — Bring it up
 
 ```bash
@@ -88,9 +112,11 @@ docker compose up -d --wait
 
 `--wait` blocks until the healthcheck passes. First boot: ~90s. Subsequent boots: ~15s.
 
+The compose template uses the image's own `/opt/oracle/checkDBStatus.sh` for the healthcheck — it returns 0 only when the PDB is actually OPEN. Do not regress this to the older `echo 'SELECT 1 FROM DUAL;' | sqlplus -L ... | grep -q '1'` pattern: when the entrypoint aborts (e.g. arch mismatch — see Step 3b), sqlplus returns an `ORA-01034: ORACLE not available` banner containing the digit `1`, the grep matches the error text, and compose reports HEALTHY for a container that has zero Oracle processes inside. This is the friction Step 3b was added to catch.
+
 If `--wait` exits non-zero:
 1. Print `docker compose logs oracle | tail -30`.
-2. Common causes: port collision (someone else has 1521 — ask the user to pick a different port and re-run), insufficient memory (Oracle needs ~2GB; tell the user), corrupt volume (rare, suggest `docker compose down -v` AFTER confirming with the user).
+2. Common causes: port collision (someone else has 1521 — ask the user to pick a different port and re-run), insufficient memory (Oracle needs ~2GB; tell the user), corrupt volume (rare, suggest `docker compose down -v` AFTER confirming with the user), arch mismatch (look for `su: Authentication failure` or `Permission denied` in the logs — re-run Step 3b).
 3. Stop. Don't retry blindly.
 
 ## Step 5 — Smoke SYSTEM connect
