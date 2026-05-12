@@ -175,16 +175,26 @@ findings.md
 progress.md
 apps/agentic_rag/.serena/
 apps/agentic_rag/.webui_secret_key
+apps/agentic_rag/cot_chat_debug.json
 
 # Plan files in agentic_rag
 apps/agentic_rag/docs/plans/
 apps/agentic_rag/frontend/docs/plans/
+
+# choose-your-path local user testing — each user's scaffolded test projects
+# live here and are not meant to be committed.
+choose-your-path/tests/*
+!choose-your-path/tests/.gitkeep
 
 # Claude Code / AI tooling
 .playwright-mcp/
 .serena/
 **/.mcp.json
 .claude/
+.omc/
+.agents/
+.crush/
+.openhands/
 .cursorrules
 .cursorignore
 .cursorindexingignore
@@ -218,3 +228,5 @@ notebooks/config.yaml
 !apps/tanstack-shoe-store/src/lib/
 !apps/tanstack-shoe-store/src/lib/**
 !apps/tanstack-shoe-store/.vscode/
+
+choose-your-path/tests/
