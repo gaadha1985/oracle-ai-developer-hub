@@ -1,6 +1,6 @@
-# choose-your-path
+# Build Paths
 
-A skill set that interrogates you, picks an Oracle-AI-DB project at your level, and scaffolds a real, runnable application powered by **OCI Generative AI Grok 4** + **`langchain-oracledb`** + **Oracle 26ai Free in Docker**. Three paths, three projects per path. Pick by complexity, not access — any of them are open to anyone with a single OCI Generative AI API key (`sk-...`).
+A set of **Oracle skills** built by expert OCI developers and packaged so your coding agent can use them while you build. Point Claude Code (or Cursor, Aider, or any agent that reads markdown skills) at this directory and it's as if we're sitting next to you — scaffolding the Oracle 26ai container, wiring up `langchain-oracledb`, registering the in-DB ONNX embedder, plugging the Oracle MCP server in, and writing the app code the way an Oracle engineer would do it. Three build paths, three sample apps per path: pick whichever shape matches what you're passionate about, then improve it with whatever you'd bring to it. The Oracle skills don't change; the corner you take Oracle into does.
 
 | Path | What you build | Stack | Time |
 | --- | --- | --- | --- |
